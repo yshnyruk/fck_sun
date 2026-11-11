@@ -3,6 +3,6 @@ from fastapi import FastAPI
 app = FastAPI()
 
 
-@app.get("/health")
+@app.get("/api/v1/health")
 def read_health() -> dict[str, str]:
     return {"status": "ok"}
