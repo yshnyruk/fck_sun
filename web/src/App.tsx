@@ -130,10 +130,16 @@ function App() {
   };
   const handlePointerMove = (event: React.PointerEvent<HTMLElement>) => {
     if (dragStart.current === null || searchOpen) return;
-    const distance = Math.min(maxPanelHeight - dragStart.current.height, Math.max(-184, dragStart.current.y - event.clientY));
+    const distance = Math.min(
+      maxPanelHeight - dragStart.current.height,
+      Math.max(-184, dragStart.current.y - event.clientY),
+    );
     wasDragged.current = Math.abs(distance) > 8;
     setDragDistance(
-      Math.min(maxPanelHeight - dragStart.current.height, Math.max(collapsedHeight - dragStart.current.height, distance)),
+      Math.min(
+        maxPanelHeight - dragStart.current.height,
+        Math.max(collapsedHeight - dragStart.current.height, distance),
+      ),
     );
   };
   const handlePointerUp = (event?: React.PointerEvent<HTMLElement>) => {
@@ -167,7 +173,11 @@ function App() {
     setPanelHeight(nextHeight);
   };
   const handlePanelClick = (event: React.MouseEvent<HTMLDivElement>) => {
-    if (wasDragged.current || searchOpen || (event.target as HTMLElement).closest("button, input")) {
+    if (
+      wasDragged.current ||
+      searchOpen ||
+      (event.target as HTMLElement).closest("button, input")
+    ) {
       wasDragged.current = false;
       return;
     }
@@ -311,7 +321,9 @@ function App() {
               <p>Recent destinations</p>
               {recentDestinations.map((destination) => (
                 <button type="button" key={destination}>
-                  <span className="recent-icon"><Icon name="arrow" /></span>
+                  <span className="recent-icon">
+                    <Icon name="arrow" />
+                  </span>
                   {destination}
                 </button>
               ))}
@@ -330,18 +342,16 @@ function App() {
                 >
                   <Icon name="back" />
                 </button>
-                <input
-                  autoFocus
-                  aria-label="Search for a destination"
-                  placeholder="Where to?"
-                />
+                <input autoFocus aria-label="Search for a destination" placeholder="Where to?" />
               </div>
             </div>
             <div className="recent-destinations">
               <p>Recent destinations</p>
               {recentDestinations.map((destination) => (
                 <button type="button" key={destination}>
-                  <span className="recent-icon"><Icon name="arrow" /></span>
+                  <span className="recent-icon">
+                    <Icon name="arrow" />
+                  </span>
                   {destination}
                 </button>
               ))}
