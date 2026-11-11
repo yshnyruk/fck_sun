@@ -22,3 +22,37 @@ Backend settings include `ENVIRONMENT`, `LOG_LEVEL`, `CORS_ORIGINS`,
 The frontend only reads `VITE_API_BASE_URL`, which defaults to `/api/v1`.
 Browser-exposed `VITE_` variables must not contain private service
 credentials.
+
+## Development
+
+Install the backend dependencies in a virtual environment and the frontend
+dependencies before starting the applications:
+
+```sh
+python -m venv api/.venv
+api/.venv/bin/python -m pip install -r api/requirements.txt
+npm --prefix web install
+```
+
+Start both applications together from the repository root:
+
+```sh
+make dev
+```
+
+The frontend is available at `http://127.0.0.1:5173` and the backend health
+endpoint is available at `http://127.0.0.1:8000/api/v1/health`.
+
+The applications can also be started independently:
+
+```sh
+make backend
+make frontend
+```
+
+`make backend` uses the active Python environment, so activate
+`api/.venv` first when it is not already active:
+
+```sh
+source api/.venv/bin/activate
+```
