@@ -30,6 +30,24 @@
   height: 100%;
 }
 
+.selected-location {
+  position: absolute;
+  z-index: 7;
+  top: 16px;
+  left: 50%;
+  max-width: calc(100% - 32px);
+  padding: 8px 12px;
+  transform: translateX(-50%);
+  border: 1px solid rgba(36, 122, 203, 0.18);
+  border-radius: 999px;
+  color: #1d5c9b;
+  background: rgba(255, 255, 255, 0.94);
+  box-shadow: 0 4px 14px rgba(31, 72, 109, 0.18);
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
 .icon {
   display: block;
   width: 22px;

@@ -1,9 +1,13 @@
 import * as maplibregl from "maplibre-gl";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import "./App.css";
 import "maplibre-gl/dist/maplibre-gl.css";
 
 maplibregl.setWorkerUrl(new URL("maplibre-gl/dist/maplibre-gl-worker.mjs", import.meta.url).href);
+
+const BASE_MAP_STYLE = "https://tiles.openfreemap.org/styles/liberty";
+const INITIAL_MAP_VIEW: maplibregl.MapOptions["center"] = [-73.97, 40.78];
+const INITIAL_MAP_ZOOM = 12;
 
 type IconName =
   | "arrow"
@@ -87,9 +91,11 @@ function Icon({ name }: { name: IconName }) {
 function MapView({
   mapRef,
   geolocateRef,
+  onLocationSelect,
 }: {
   mapRef: React.RefObject<maplibregl.Map | null>;
   geolocateRef: React.RefObject<maplibregl.GeolocateControl | null>;
+  onLocationSelect: (location: maplibregl.LngLatLike) => void;
 }) {
   const containerRef = useRef<HTMLDivElement | null>(null);
 
@@ -98,9 +104,14 @@ function MapView({
 
     const map = new maplibregl.Map({
       container: containerRef.current,
-      style: "https://tiles.openfreemap.org/styles/liberty",
-      center: [-73.97, 40.78],
-      zoom: 12,
+      style: BASE_MAP_STYLE,
+      center: INITIAL_MAP_VIEW,
+      zoom: INITIAL_MAP_ZOOM,
+      minZoom: 2,
+      maxZoom: 19,
+      dragPan: true,
+      scrollZoom: true,
+      touchZoomRotate: true,
       attributionControl: { compact: true },
     });
 
@@ -110,12 +121,22 @@ function MapView({
     geolocateRef.current = geolocateControl;
     map.addControl(geolocateControl, "bottom-right");
 
+    const handleMapClick = (event: maplibregl.MapMouseEvent) => {
+      onLocationSelect(event.lngLat);
+    };
+    map.on("click", handleMapClick);
+
+    const resizeObserver = new ResizeObserver(() => map.resize());
+    resizeObserver.observe(containerRef.current);
+
     return () => {
+      map.off("click", handleMapClick);
+      resizeObserver.disconnect();
       map.remove();
       mapRef.current = null;
       geolocateRef.current = null;
     };
-  }, [geolocateRef, mapRef]);
+  }, [geolocateRef, mapRef, onLocationSelect]);
 
   return <div ref={containerRef} className="maplibre-map" aria-label="Interactive map" />;
 }
@@ -137,6 +158,8 @@ function App() {
   const wasDragged = useRef(false);
   const mapRef = useRef<maplibregl.Map | null>(null);
   const geolocateRef = useRef<maplibregl.GeolocateControl | null>(null);
+  const [selectedLocation, setSelectedLocation] = useState<maplibregl.LngLat | null>(null);
+  const selectedMarkerRef = useRef<maplibregl.Marker | null>(null);
 
   const formattedTime = `${String(Math.floor(time)).padStart(2, "0")}:${time % 1 ? "30" : "00"}`;
   const collapsedHeight = 84;
@@ -149,6 +172,16 @@ function App() {
   const maxPanelHeight = Math.round(window.innerHeight * 0.9);
   const sheetHeight = `${Math.min(maxPanelHeight, Math.max(collapsedHeight, restingHeight + dragDistance))}px`;
   const panelAtMaximum = panelHeight >= maxPanelHeight;
+  const handleLocationSelect = useCallback((location: maplibregl.LngLatLike) => {
+    const lngLat = maplibregl.LngLat.convert(location);
+    if (!Number.isFinite(lngLat.lng) || !Number.isFinite(lngLat.lat)) return;
+
+    selectedMarkerRef.current?.remove();
+    selectedMarkerRef.current = mapRef.current
+      ? new maplibregl.Marker({ color: "#247acb" }).setLngLat(lngLat).addTo(mapRef.current)
+      : null;
+    setSelectedLocation(lngLat);
+  }, []);
   const openSearchScreen = () => {
     setIsClosingSearch(false);
     setSearchOpen(true);
@@ -233,7 +266,17 @@ function App() {
         style={{ "--sheet-height": sheetHeight } as React.CSSProperties}
         aria-label="Map"
       >
-        <MapView mapRef={mapRef} geolocateRef={geolocateRef} />
+        <MapView
+          mapRef={mapRef}
+          geolocateRef={geolocateRef}
+          onLocationSelect={handleLocationSelect}
+        />
+        {selectedLocation && (
+          <div className="selected-location" role="status" aria-live="polite">
+            Starting location selected: {selectedLocation.lat.toFixed(5)},{" "}
+            {selectedLocation.lng.toFixed(5)}
+          </div>
+        )}
 
         <div className="controls-stack absolute right-4 z-[7] flex flex-col gap-2 sm:right-6">
           <button
