@@ -1,101 +1,355 @@
-import { useState } from "react";
-import heroImg from "./assets/hero.png";
-import reactLogo from "./assets/react.svg";
-import viteLogo from "./assets/vite.svg";
+import { useRef, useState } from "react";
 import "./App.css";
 
-function App() {
-  const [count, setCount] = useState(0);
+type IconName =
+  | "arrow"
+  | "back"
+  | "chevron"
+  | "compass"
+  | "crosshair"
+  | "moon"
+  | "search"
+  | "shadow"
+  | "sun"
+  | "sunrise"
+  | "sunset";
+
+const recentDestinations = [
+  "Home",
+  "Work",
+  "Central Park",
+  "Riverside Market",
+  "City Library",
+  "West Station",
+  "Sunset Beach",
+  "Old Town",
+];
+
+function Icon({ name }: { name: IconName }) {
+  const paths: Record<IconName, React.ReactNode> = {
+    arrow: <path d="m5 12 14-7-7 14-2-5-5-2Z" />,
+    back: <path d="m15 18-6-6 6-6M9 12h10" />,
+    chevron: <path d="m6 9 6 6 6-6" />,
+    compass: (
+      <>
+        <circle cx="12" cy="12" r="8.5" />
+        <path d="m15.8 8.2-2.2 5.6-5.6 2.2 2.2-5.6 5.6-2.2Z" />
+      </>
+    ),
+    crosshair: (
+      <>
+        <circle cx="12" cy="12" r="4" />
+        <path d="M12 2v3M12 19v3M2 12h3M19 12h3" />
+      </>
+    ),
+    moon: <path d="M20 15.2A8.5 8.5 0 0 1 8.8 4 8.5 8.5 0 1 0 20 15.2Z" />,
+    search: (
+      <>
+        <circle cx="10.8" cy="10.8" r="6.8" />
+        <path d="m16 16 4 4" />
+      </>
+    ),
+    shadow: (
+      <>
+        <path d="M5 18h14M7 15h10M9 12h6M11 9h2" />
+        <path d="m6 5 12 12" />
+      </>
+    ),
+    sun: (
+      <>
+        <circle cx="12" cy="12" r="3.5" />
+        <path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4" />
+      </>
+    ),
+    sunrise: (
+      <>
+        <path d="M3 18h18M6 15a6 6 0 0 1 12 0M12 3v3M5.6 7.6l2 2M18.4 7.6l-2 2" />
+      </>
+    ),
+    sunset: (
+      <>
+        <path d="M3 18h18M6 15a6 6 0 0 1 12 0M12 3v3M5.6 7.6l2 2M18.4 7.6l-2 2" />
+      </>
+    ),
+  };
 
   return (
-    <>
-      <section id="center">
-        <div className="hero">
-          <img src={heroImg} className="base" width="170" height="179" alt="" />
-          <img src={reactLogo} className="framework" alt="React logo" />
-          <img src={viteLogo} className="vite" alt="Vite logo" />
+    <svg aria-hidden="true" className="icon" viewBox="0 0 24 24" fill="none">
+      {paths[name]}
+    </svg>
+  );
+}
+
+function App() {
+  const [shadowsEnabled, setShadowsEnabled] = useState(true);
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [isClosingSearch, setIsClosingSearch] = useState(false);
+  const [panelExpanded, setPanelExpanded] = useState(false);
+  const [panelHeight, setPanelHeight] = useState(84);
+  const [currentTime] = useState(() => {
+    const now = new Date();
+    return Math.round((now.getHours() + now.getMinutes() / 60) * 2) / 2;
+  });
+  const [time, setTime] = useState(currentTime);
+  const [dragDistance, setDragDistance] = useState(0);
+  const [isDragging, setIsDragging] = useState(false);
+  const dragStart = useRef<{ y: number; height: number } | null>(null);
+  const wasDragged = useRef(false);
+
+  const formattedTime = `${String(Math.floor(time)).padStart(2, "0")}:${time % 1 ? "30" : "00"}`;
+  const collapsedHeight = 84;
+  const getSnapHeights = () => [
+    collapsedHeight,
+    Math.round(window.innerHeight * 0.4),
+    Math.round(window.innerHeight * 0.9),
+  ];
+  const restingHeight = panelExpanded ? panelHeight : collapsedHeight;
+  const maxPanelHeight = Math.round(window.innerHeight * 0.9);
+  const sheetHeight = `${Math.min(maxPanelHeight, Math.max(collapsedHeight, restingHeight + dragDistance))}px`;
+  const panelAtMaximum = panelHeight >= maxPanelHeight;
+  const openSearchScreen = () => {
+    setIsClosingSearch(false);
+    setSearchOpen(true);
+  };
+  const closeSearchScreen = () => {
+    setIsClosingSearch(true);
+    window.setTimeout(() => {
+      setSearchOpen(false);
+      setIsClosingSearch(false);
+      setPanelExpanded(false);
+      setPanelHeight(collapsedHeight);
+      setDragDistance(0);
+    }, 260);
+  };
+  const handlePointerDown = (event: React.PointerEvent<HTMLElement>) => {
+    if (searchOpen) return;
+    dragStart.current = { y: event.clientY, height: restingHeight };
+    wasDragged.current = false;
+    setIsDragging(true);
+    event.currentTarget.setPointerCapture(event.pointerId);
+  };
+  const handlePointerMove = (event: React.PointerEvent<HTMLElement>) => {
+    if (dragStart.current === null || searchOpen) return;
+    const distance = Math.min(maxPanelHeight - dragStart.current.height, Math.max(-184, dragStart.current.y - event.clientY));
+    wasDragged.current = Math.abs(distance) > 8;
+    setDragDistance(
+      Math.min(maxPanelHeight - dragStart.current.height, Math.max(collapsedHeight - dragStart.current.height, distance)),
+    );
+  };
+  const handlePointerUp = (event?: React.PointerEvent<HTMLElement>) => {
+    if (dragStart.current === null) return;
+    if (searchOpen) {
+      setDragDistance(0);
+      setIsDragging(false);
+      dragStart.current = null;
+      return;
+    }
+    const distance = event ? dragStart.current.y - event.clientY : dragDistance;
+    const nextHeight = dragStart.current.height + distance;
+    const nextPanelHeight = getSnapHeights().reduce((closest, snapHeight) =>
+      Math.abs(snapHeight - nextHeight) < Math.abs(closest - nextHeight) ? snapHeight : closest,
+    );
+    setPanelExpanded(nextPanelHeight > collapsedHeight);
+    setPanelHeight(nextPanelHeight);
+    setDragDistance(0);
+    setIsDragging(false);
+    dragStart.current = null;
+  };
+  const handleHandleClick = () => {
+    if (wasDragged.current) {
+      wasDragged.current = false;
+      return;
+    }
+    const snapHeights = getSnapHeights();
+    const currentIndex = snapHeights.indexOf(panelHeight);
+    const nextHeight = snapHeights[(currentIndex + 1) % snapHeights.length];
+    setPanelExpanded(nextHeight > collapsedHeight);
+    setPanelHeight(nextHeight);
+  };
+  const handlePanelClick = (event: React.MouseEvent<HTMLDivElement>) => {
+    if (wasDragged.current || searchOpen || (event.target as HTMLElement).closest("button, input")) {
+      wasDragged.current = false;
+      return;
+    }
+    handleHandleClick();
+  };
+
+  return (
+    <main className="h-full w-full overflow-hidden">
+      <section
+        className={`map-canvas ${shadowsEnabled ? "show-shadows" : ""} ${panelAtMaximum ? "panel-at-maximum" : ""}`}
+        style={{ "--sheet-height": sheetHeight } as React.CSSProperties}
+        aria-label="Map"
+      >
+        <div className="map-grid" />
+        <div className="map-water water-one" />
+        <div className="map-water water-two" />
+        <div className="map-road road-main" />
+        <div className="map-road road-side road-side-one" />
+        <div className="map-road road-side road-side-two" />
+        <div className="map-road road-side road-side-three" />
+        <div className="map-block block-one" />
+        <div className="map-block block-two" />
+        <div className="map-block block-three" />
+        <div className="map-block block-four" />
+        <div className="map-label label-one">Riverside</div>
+        <div className="map-label label-two">Downtown</div>
+        <div className="map-label label-three">Park</div>
+
+        <div className="current-location" aria-label="Your current location">
+          <span />
         </div>
-        <div>
-          <h1>Get started</h1>
-          <p>
-            Edit <code>src/App.tsx</code> and save to test <code>HMR</code>
-          </p>
+
+        <div className="controls-stack absolute right-4 z-[7] flex flex-col gap-2 sm:right-6">
+          <button
+            className="relative grid h-11 w-11 place-items-center rounded-full border-0 bg-white/95 text-[#1d5c9b] shadow-[0_4px_14px_rgba(31,72,109,0.18)] transition-transform hover:scale-105 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#247acb]"
+            type="button"
+            aria-label="Orient map north"
+            title="Orient map north"
+          >
+            <Icon name="compass" />
+            <span className="absolute top-0 text-[8px] font-extrabold text-[#e85c69]">N</span>
+          </button>
+          <button
+            className="grid h-11 w-11 place-items-center rounded-full border-0 bg-white/95 text-[#1d5c9b] shadow-[0_4px_14px_rgba(31,72,109,0.18)] transition-transform hover:scale-105 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#247acb]"
+            type="button"
+            aria-label="Show my location"
+          >
+            <Icon name="crosshair" />
+          </button>
+          <button
+            className={`grid h-11 w-11 place-items-center rounded-full border-0 shadow-[0_4px_14px_rgba(31,72,109,0.18)] transition-transform hover:scale-105 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#247acb] ${
+              shadowsEnabled ? "bg-[#247acb] text-white" : "bg-white/95 text-[#1d5c9b]"
+            }`}
+            type="button"
+            aria-pressed={shadowsEnabled}
+            aria-label={shadowsEnabled ? "Turn shadows off" : "Turn shadows on"}
+            onClick={() => setShadowsEnabled((enabled) => !enabled)}
+          >
+            <Icon name="shadow" />
+          </button>
         </div>
-        <button type="button" className="counter" onClick={() => setCount((count) => count + 1)}>
-          Count is {count}
-        </button>
+
+        {shadowsEnabled && (
+          <div className="time-dial" aria-label="Shadow time">
+            <div className="dial-arc" />
+            <div className="dial-marker marker-midnight">
+              <Icon name="moon" />
+              <span>00:00</span>
+            </div>
+            <div className="dial-marker marker-sunrise">
+              <Icon name="sunrise" />
+              <span>06:00</span>
+            </div>
+            <div className="dial-marker marker-midday">
+              <Icon name="sun" />
+              <span>12:00</span>
+            </div>
+            <div className="dial-marker marker-sunset">
+              <Icon name="sunset" />
+              <span>18:00</span>
+            </div>
+            <div className="dial-now">
+              <span className="dial-now-arrow" />
+              <strong>{formattedTime}</strong>
+            </div>
+            <input
+              aria-label="Choose time of day"
+              type="range"
+              min="0"
+              max="24"
+              step="0.5"
+              value={time}
+              onChange={(event) => setTime(Number(event.target.value))}
+            />
+            {time !== currentTime && (
+              <button className="return-now" type="button" onClick={() => setTime(currentTime)}>
+                Tap to return to now
+              </button>
+            )}
+          </div>
+        )}
+
+        <div
+          className={`search-panel h-[var(--sheet-height)] ${isDragging ? "dragging" : "transition-[height] duration-300 ease-out"} ${panelExpanded ? "panel-expanded" : ""}`}
+          onPointerDown={handlePointerDown}
+          onPointerMove={handlePointerMove}
+          onPointerUp={handlePointerUp}
+          onPointerCancel={handlePointerUp}
+          onClick={handlePanelClick}
+        >
+          <button
+            className="search-handle touch-none"
+            type="button"
+            aria-label="Expand destination search"
+            onClick={handleHandleClick}
+          >
+            <span />
+          </button>
+          <div className="search-row mx-auto max-w-[600px]">
+            <Icon name="search" />
+            <input
+              aria-label="Search for a destination"
+              placeholder="Where to?"
+              onFocus={openSearchScreen}
+            />
+            <button
+              className="search-arrow"
+              type="button"
+              aria-label="Expand search"
+              onClick={(event) => {
+                event.stopPropagation();
+                setPanelHeight(getSnapHeights()[1]);
+                openSearchScreen();
+              }}
+            >
+              <Icon name="chevron" />
+            </button>
+          </div>
+          {panelExpanded && (
+            <div className="recent-destinations">
+              <p>Recent destinations</p>
+              {recentDestinations.map((destination) => (
+                <button type="button" key={destination}>
+                  <span className="recent-icon"><Icon name="arrow" /></span>
+                  {destination}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+        {searchOpen && (
+          <div className={`search-screen ${isClosingSearch ? "closing" : ""}`}>
+            <div className="search-screen-header">
+              <div className="search-row">
+                <button
+                  className="search-back"
+                  type="button"
+                  aria-label="Close search"
+                  onClick={closeSearchScreen}
+                >
+                  <Icon name="back" />
+                </button>
+                <input
+                  autoFocus
+                  aria-label="Search for a destination"
+                  placeholder="Where to?"
+                />
+              </div>
+            </div>
+            <div className="recent-destinations">
+              <p>Recent destinations</p>
+              {recentDestinations.map((destination) => (
+                <button type="button" key={destination}>
+                  <span className="recent-icon"><Icon name="arrow" /></span>
+                  {destination}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
       </section>
-
-      <div className="ticks"></div>
-
-      <section id="next-steps">
-        <div id="docs">
-          <svg className="icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#documentation-icon"></use>
-          </svg>
-          <h2>Documentation</h2>
-          <p>Your questions, answered</p>
-          <ul>
-            <li>
-              <a href="https://vite.dev/" target="_blank">
-                <img className="logo" src={viteLogo} alt="" />
-                Explore Vite
-              </a>
-            </li>
-            <li>
-              <a href="https://react.dev/" target="_blank">
-                <img className="button-icon" src={reactLogo} alt="" />
-                Learn more
-              </a>
-            </li>
-          </ul>
-        </div>
-        <div id="social">
-          <svg className="icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#social-icon"></use>
-          </svg>
-          <h2>Connect with us</h2>
-          <p>Join the Vite community</p>
-          <ul>
-            <li>
-              <a href="https://github.com/vitejs/vite" target="_blank">
-                <svg className="button-icon" role="presentation" aria-hidden="true">
-                  <use href="/icons.svg#github-icon"></use>
-                </svg>
-                GitHub
-              </a>
-            </li>
-            <li>
-              <a href="https://chat.vite.dev/" target="_blank">
-                <svg className="button-icon" role="presentation" aria-hidden="true">
-                  <use href="/icons.svg#discord-icon"></use>
-                </svg>
-                Discord
-              </a>
-            </li>
-            <li>
-              <a href="https://x.com/vite_js" target="_blank">
-                <svg className="button-icon" role="presentation" aria-hidden="true">
-                  <use href="/icons.svg#x-icon"></use>
-                </svg>
-                X.com
-              </a>
-            </li>
-            <li>
-              <a href="https://bsky.app/profile/vite.dev" target="_blank">
-                <svg className="button-icon" role="presentation" aria-hidden="true">
-                  <use href="/icons.svg#bluesky-icon"></use>
-                </svg>
-                Bluesky
-              </a>
-            </li>
-          </ul>
-        </div>
-      </section>
-
-      <div className="ticks"></div>
-      <section id="spacer"></section>
-    </>
+    </main>
   );
 }
 
