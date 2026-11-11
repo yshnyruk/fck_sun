@@ -8,6 +8,35 @@ maplibregl.setWorkerUrl(new URL("maplibre-gl/dist/maplibre-gl-worker.mjs", impor
 const BASE_MAP_STYLE = "https://tiles.openfreemap.org/styles/liberty";
 const INITIAL_MAP_VIEW: maplibregl.MapOptions["center"] = [-73.97, 40.78];
 const INITIAL_MAP_ZOOM = 12;
+const MAP_STYLES = {
+  default: BASE_MAP_STYLE,
+  satellite: {
+    version: 8,
+    sources: {
+      satellite: {
+        type: "raster",
+        tiles: ["https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"],
+        tileSize: 256,
+        attribution: "© Esri",
+      },
+    },
+    layers: [{ id: "satellite", type: "raster", source: "satellite" }],
+  },
+  terrain: {
+    version: 8,
+    sources: {
+      terrain: {
+        type: "raster",
+        tiles: ["https://tile.opentopomap.org/{z}/{x}/{y}.png"],
+        tileSize: 256,
+        attribution: "© OpenTopoMap contributors",
+      },
+    },
+    layers: [{ id: "terrain", type: "raster", source: "terrain" }],
+  },
+} satisfies Record<string, maplibregl.StyleSpecification | string>;
+
+type MapStyleName = keyof typeof MAP_STYLES;
 
 type IconName =
   | "arrow"
@@ -15,6 +44,7 @@ type IconName =
   | "chevron"
   | "compass"
   | "crosshair"
+  | "layers"
   | "moon"
   | "search"
   | "shadow"
@@ -48,6 +78,12 @@ function Icon({ name }: { name: IconName }) {
       <>
         <circle cx="12" cy="12" r="4" />
         <path d="M12 2v3M12 19v3M2 12h3M19 12h3" />
+      </>
+    ),
+    layers: (
+      <>
+        <path d="m12 3 8 4-8 4-8-4 8-4Z" />
+        <path d="m4 12 8 4 8-4M4 17l8 4 8-4" />
       </>
     ),
     moon: <path d="M20 15.2A8.5 8.5 0 0 1 8.8 4 8.5 8.5 0 1 0 20 15.2Z" />,
@@ -90,12 +126,16 @@ function Icon({ name }: { name: IconName }) {
 
 function MapView({
   mapRef,
-  geolocateRef,
   onLocationSelect,
+  onMapClick,
+  onMapReady,
+  mapStyle,
 }: {
   mapRef: React.RefObject<maplibregl.Map | null>;
-  geolocateRef: React.RefObject<maplibregl.GeolocateControl | null>;
   onLocationSelect: (location: maplibregl.LngLatLike) => void;
+  onMapClick: () => boolean;
+  onMapReady: () => void;
+  mapStyle: MapStyleName;
 }) {
   const containerRef = useRef<HTMLDivElement | null>(null);
 
@@ -116,12 +156,17 @@ function MapView({
     });
 
     mapRef.current = map;
-    map.addControl(new maplibregl.NavigationControl({ showCompass: false }), "top-right");
-    const geolocateControl = new maplibregl.GeolocateControl({ trackUserLocation: true });
-    geolocateRef.current = geolocateControl;
-    map.addControl(geolocateControl, "bottom-right");
-
+    map.once("load", onMapReady);
+    const hideThreeDimensionalBuildings = () => {
+      for (const layer of map.getStyle().layers ?? []) {
+        if (layer.type === "fill-extrusion") {
+          map.setLayoutProperty(layer.id, "visibility", "none");
+        }
+      }
+    };
+    map.on("style.load", hideThreeDimensionalBuildings);
     const handleMapClick = (event: maplibregl.MapMouseEvent) => {
+      if (onMapClick()) return;
       onLocationSelect(event.lngLat);
     };
     map.on("click", handleMapClick);
@@ -131,12 +176,16 @@ function MapView({
 
     return () => {
       map.off("click", handleMapClick);
+      map.off("style.load", hideThreeDimensionalBuildings);
       resizeObserver.disconnect();
       map.remove();
       mapRef.current = null;
-      geolocateRef.current = null;
     };
-  }, [geolocateRef, mapRef, onLocationSelect]);
+  }, [mapRef, onLocationSelect, onMapClick, onMapReady]);
+
+  useEffect(() => {
+    mapRef.current?.setStyle(MAP_STYLES[mapStyle]);
+  }, [mapRef, mapStyle]);
 
   return <div ref={containerRef} className="maplibre-map" aria-label="Interactive map" />;
 }
@@ -157,9 +206,58 @@ function App() {
   const dragStart = useRef<{ y: number; height: number } | null>(null);
   const wasDragged = useRef(false);
   const mapRef = useRef<maplibregl.Map | null>(null);
-  const geolocateRef = useRef<maplibregl.GeolocateControl | null>(null);
+  const currentLocationMarkerRef = useRef<maplibregl.Marker | null>(null);
   const [selectedLocation, setSelectedLocation] = useState<maplibregl.LngLat | null>(null);
+  const selectedLocationRef = useRef<maplibregl.LngLat | null>(null);
   const selectedMarkerRef = useRef<maplibregl.Marker | null>(null);
+  const [mapStyle, setMapStyle] = useState<MapStyleName>("default");
+  const [mapStyleOpen, setMapStyleOpen] = useState(false);
+  const focusCurrentLocation = useCallback(() => {
+    if (!navigator.geolocation || !mapRef.current) return;
+
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        const location: maplibregl.LngLatLike = [
+          position.coords.longitude,
+          position.coords.latitude,
+        ];
+        const map = mapRef.current;
+        if (!map) return;
+        if (currentLocationMarkerRef.current) {
+          currentLocationMarkerRef.current.setLngLat(location);
+        } else {
+          const markerElement = document.createElement("div");
+          markerElement.className = "current-location-marker";
+          markerElement.setAttribute("aria-label", "Your current location");
+          currentLocationMarkerRef.current = new maplibregl.Marker({
+            element: markerElement,
+            anchor: "center",
+          })
+            .setLngLat(location)
+            .addTo(map);
+          currentLocationMarkerRef.current.getElement().addEventListener("click", (event) => {
+            event.stopPropagation();
+          });
+        }
+        map.flyTo({
+          center: location,
+          zoom: Math.max(map.getZoom(), 15),
+          essential: true,
+        });
+      },
+      (error) => {
+        console.error("Unable to determine current location.", error);
+      },
+      { enableHighAccuracy: true, maximumAge: 30_000, timeout: 10_000 },
+    );
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      currentLocationMarkerRef.current?.remove();
+      currentLocationMarkerRef.current = null;
+    };
+  }, []);
 
   const formattedTime = `${String(Math.floor(time)).padStart(2, "0")}:${time % 1 ? "30" : "00"}`;
   const collapsedHeight = 84;
@@ -176,11 +274,43 @@ function App() {
     const lngLat = maplibregl.LngLat.convert(location);
     if (!Number.isFinite(lngLat.lng) || !Number.isFinite(lngLat.lat)) return;
 
+    if (
+      selectedLocationRef.current &&
+      Math.abs(selectedLocationRef.current.lng - lngLat.lng) < 0.00001 &&
+      Math.abs(selectedLocationRef.current.lat - lngLat.lat) < 0.00001
+    ) {
+      selectedMarkerRef.current?.remove();
+      selectedMarkerRef.current = null;
+      setSelectedLocation(null);
+      selectedLocationRef.current = null;
+      return;
+    }
+
     selectedMarkerRef.current?.remove();
-    selectedMarkerRef.current = mapRef.current
+    const marker = mapRef.current
       ? new maplibregl.Marker({ color: "#247acb" }).setLngLat(lngLat).addTo(mapRef.current)
       : null;
+    if (marker) {
+      marker.getElement().addEventListener("click", (event) => {
+        event.stopPropagation();
+        marker.remove();
+        selectedMarkerRef.current = null;
+        selectedLocationRef.current = null;
+        setSelectedLocation(null);
+      });
+    }
+    selectedMarkerRef.current = marker;
+    selectedLocationRef.current = lngLat;
     setSelectedLocation(lngLat);
+  }, []);
+  const handleMapClick = useCallback(() => {
+    if (!selectedLocationRef.current) return false;
+
+    selectedMarkerRef.current?.remove();
+    selectedMarkerRef.current = null;
+    selectedLocationRef.current = null;
+    setSelectedLocation(null);
+    return true;
   }, []);
   const openSearchScreen = () => {
     setIsClosingSearch(false);
@@ -268,8 +398,10 @@ function App() {
       >
         <MapView
           mapRef={mapRef}
-          geolocateRef={geolocateRef}
           onLocationSelect={handleLocationSelect}
+          onMapClick={handleMapClick}
+          onMapReady={focusCurrentLocation}
+          mapStyle={mapStyle}
         />
         {selectedLocation && (
           <div className="selected-location" role="status" aria-live="polite">
@@ -277,6 +409,36 @@ function App() {
             {selectedLocation.lng.toFixed(5)}
           </div>
         )}
+
+        <div className="map-style-control absolute right-4 top-4 z-[7] sm:right-6">
+          <div className={`map-style-switcher ${mapStyleOpen ? "open" : ""}`}>
+            <div className="map-style-options" role="group" aria-label="Map style">
+                {(["default", "satellite", "terrain"] as const).map((styleName) => (
+                  <button
+                    key={styleName}
+                    className={mapStyle === styleName ? "selected" : ""}
+                    type="button"
+                    aria-pressed={mapStyle === styleName}
+                    onClick={() => {
+                      setMapStyle(styleName);
+                      setMapStyleOpen(false);
+                    }}
+                  >
+                    {styleName}
+                  </button>
+                ))}
+            </div>
+            <button
+              className="map-style-toggle"
+              type="button"
+              aria-expanded={mapStyleOpen}
+              aria-label="Choose map style"
+              onClick={() => setMapStyleOpen((open) => !open)}
+            >
+              <Icon name="layers" />
+            </button>
+          </div>
+        </div>
 
         <div className="controls-stack absolute right-4 z-[7] flex flex-col gap-2 sm:right-6">
           <button
@@ -292,8 +454,12 @@ function App() {
           <button
             className="grid h-11 w-11 place-items-center rounded-full border-0 bg-white/95 text-[#1d5c9b] shadow-[0_4px_14px_rgba(31,72,109,0.18)] transition-transform hover:scale-105 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#247acb]"
             type="button"
-            aria-label="Show my location"
-            onClick={() => geolocateRef.current?.trigger()}
+            aria-label="Return to my location"
+            title="Return to my location"
+            onClick={(event) => {
+              event.stopPropagation();
+              focusCurrentLocation();
+            }}
           >
             <Icon name="crosshair" />
           </button>

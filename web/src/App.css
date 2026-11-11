@@ -30,6 +30,94 @@
   height: 100%;
 }
 
+.maplibre-map .maplibregl-ctrl-geolocate {
+  display: none;
+}
+
+.map-style-control {
+  pointer-events: none;
+}
+
+.map-style-switcher {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  width: 44px;
+  min-height: 44px;
+  padding: 0;
+  overflow: hidden;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.95);
+  box-shadow: 0 4px 14px rgba(31, 72, 109, 0.18);
+  pointer-events: auto;
+  transition:
+    width 0.28s ease,
+    padding 0.28s ease;
+}
+
+.map-style-options {
+  display: flex;
+  max-width: 0;
+  overflow: hidden;
+  opacity: 0;
+  transform: translateX(12px);
+  transition:
+    max-width 0.26s ease,
+    opacity 0.18s ease,
+    transform 0.26s ease;
+  pointer-events: none;
+}
+
+.map-style-switcher.open .map-style-options {
+  max-width: 260px;
+  opacity: 1;
+  transform: translateX(0);
+  pointer-events: auto;
+}
+
+.map-style-options {
+  border-radius: 999px;
+}
+
+.map-style-switcher.open {
+  width: 260px;
+  padding-left: 8px;
+}
+
+.map-style-options button {
+  padding: 8px 10px;
+  border: 0;
+  color: #1d5c9b;
+  background: transparent;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: capitalize;
+}
+
+.map-style-options button.selected {
+  color: white;
+  background: #247acb;
+}
+
+.map-style-toggle {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  color: #1d5c9b;
+  background: transparent;
+  line-height: 1;
+}
+
+.map-style-toggle .icon {
+  width: 22px;
+  height: 22px;
+}
+
 .selected-location {
   position: absolute;
   z-index: 7;
@@ -46,6 +134,51 @@
   font-size: 12px;
   font-weight: 700;
   white-space: nowrap;
+}
+
+.current-location-marker {
+  position: relative;
+  width: 24px;
+  height: 24px;
+  border: 3px solid white;
+  border-radius: 50%;
+  background: #287bd3;
+  box-shadow:
+    0 1px 5px rgba(22, 57, 92, 0.4),
+    0 0 0 8px rgba(53, 139, 220, 0.15);
+  cursor: pointer;
+}
+
+.current-location-marker::before {
+  position: absolute;
+  inset: -10px;
+  border: 2px solid rgba(53, 139, 220, 0.42);
+  border-radius: 50%;
+  content: "";
+  animation: current-location-pulse 2s ease-out infinite;
+}
+
+.current-location-marker::after {
+  position: absolute;
+  top: 4px;
+  left: 4px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #b7dcff;
+  content: "";
+}
+
+@keyframes current-location-pulse {
+  0% {
+    opacity: 0.65;
+    transform: scale(0.55);
+  }
+  70%,
+  100% {
+    opacity: 0;
+    transform: scale(1.35);
+  }
 }
 
 .icon {
