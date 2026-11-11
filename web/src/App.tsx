@@ -1,5 +1,9 @@
-import { useRef, useState } from "react";
+import * as maplibregl from "maplibre-gl";
+import { useEffect, useRef, useState } from "react";
 import "./App.css";
+import "maplibre-gl/dist/maplibre-gl.css";
+
+maplibregl.setWorkerUrl(new URL("maplibre-gl/dist/maplibre-gl-worker.mjs", import.meta.url).href);
 
 type IconName =
   | "arrow"
@@ -80,6 +84,42 @@ function Icon({ name }: { name: IconName }) {
   );
 }
 
+function MapView({
+  mapRef,
+  geolocateRef,
+}: {
+  mapRef: React.RefObject<maplibregl.Map | null>;
+  geolocateRef: React.RefObject<maplibregl.GeolocateControl | null>;
+}) {
+  const containerRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    if (!containerRef.current) return;
+
+    const map = new maplibregl.Map({
+      container: containerRef.current,
+      style: "https://tiles.openfreemap.org/styles/liberty",
+      center: [-73.97, 40.78],
+      zoom: 12,
+      attributionControl: { compact: true },
+    });
+
+    mapRef.current = map;
+    map.addControl(new maplibregl.NavigationControl({ showCompass: false }), "top-right");
+    const geolocateControl = new maplibregl.GeolocateControl({ trackUserLocation: true });
+    geolocateRef.current = geolocateControl;
+    map.addControl(geolocateControl, "bottom-right");
+
+    return () => {
+      map.remove();
+      mapRef.current = null;
+      geolocateRef.current = null;
+    };
+  }, [geolocateRef, mapRef]);
+
+  return <div ref={containerRef} className="maplibre-map" aria-label="Interactive map" />;
+}
+
 function App() {
   const [shadowsEnabled, setShadowsEnabled] = useState(true);
   const [searchOpen, setSearchOpen] = useState(false);
@@ -95,6 +135,8 @@ function App() {
   const [isDragging, setIsDragging] = useState(false);
   const dragStart = useRef<{ y: number; height: number } | null>(null);
   const wasDragged = useRef(false);
+  const mapRef = useRef<maplibregl.Map | null>(null);
+  const geolocateRef = useRef<maplibregl.GeolocateControl | null>(null);
 
   const formattedTime = `${String(Math.floor(time)).padStart(2, "0")}:${time % 1 ? "30" : "00"}`;
   const collapsedHeight = 84;
@@ -191,24 +233,7 @@ function App() {
         style={{ "--sheet-height": sheetHeight } as React.CSSProperties}
         aria-label="Map"
       >
-        <div className="map-grid" />
-        <div className="map-water water-one" />
-        <div className="map-water water-two" />
-        <div className="map-road road-main" />
-        <div className="map-road road-side road-side-one" />
-        <div className="map-road road-side road-side-two" />
-        <div className="map-road road-side road-side-three" />
-        <div className="map-block block-one" />
-        <div className="map-block block-two" />
-        <div className="map-block block-three" />
-        <div className="map-block block-four" />
-        <div className="map-label label-one">Riverside</div>
-        <div className="map-label label-two">Downtown</div>
-        <div className="map-label label-three">Park</div>
-
-        <div className="current-location" aria-label="Your current location">
-          <span />
-        </div>
+        <MapView mapRef={mapRef} geolocateRef={geolocateRef} />
 
         <div className="controls-stack absolute right-4 z-[7] flex flex-col gap-2 sm:right-6">
           <button
@@ -216,6 +241,7 @@ function App() {
             type="button"
             aria-label="Orient map north"
             title="Orient map north"
+            onClick={() => mapRef.current?.resetNorth()}
           >
             <Icon name="compass" />
             <span className="absolute top-0 text-[8px] font-extrabold text-[#e85c69]">N</span>
@@ -224,6 +250,7 @@ function App() {
             className="grid h-11 w-11 place-items-center rounded-full border-0 bg-white/95 text-[#1d5c9b] shadow-[0_4px_14px_rgba(31,72,109,0.18)] transition-transform hover:scale-105 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#247acb]"
             type="button"
             aria-label="Show my location"
+            onClick={() => geolocateRef.current?.trigger()}
           >
             <Icon name="crosshair" />
           </button>
