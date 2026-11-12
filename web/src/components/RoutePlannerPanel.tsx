@@ -66,6 +66,12 @@ function RouteSummary({
       : route.coverage_confidence === "partial"
         ? "Partial"
         : "Insufficient";
+  const confidenceNote =
+    route.coverage_confidence === "high"
+      ? "Shade estimates cover most of this route."
+      : route.coverage_confidence === "partial"
+        ? "Some segments have unknown shade and are not counted as exposed."
+        : "Shade data is too limited for reliable shade guidance on this route.";
 
   return (
     <button
@@ -89,8 +95,9 @@ function RouteSummary({
         </strong>
       </p>
       <p className="route-summary-confidence">
-        Coverage confidence: {confidence}
+        Shade data coverage: {confidence}
       </p>
+      <p className="route-summary-confidence-note">{confidenceNote}</p>
       {route.shade && route.shade.unknown_distance_m > 0 && (
         <p className="route-summary-unknown">
           Shade unknown for {Math.round(route.shade.unknown_distance_m)} m of this route

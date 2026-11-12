@@ -202,7 +202,10 @@ describe("FckSun frontend", () => {
     expect(screen.getByText(/1.2 km · 15 min/)).toBeDefined();
     expect(screen.getByText("Overall shade coverage")).toBeDefined();
     expect(screen.getByText("65%")).toBeDefined();
-    expect(screen.getByText("Coverage confidence: Partial")).toBeDefined();
+    expect(screen.getByText("Shade data coverage: Partial")).toBeDefined();
+    expect(
+      screen.getByText("Some segments have unknown shade and are not counted as exposed."),
+    ).toBeDefined();
     expect(screen.getByText("Shade unknown for 200 m of this route")).toBeDefined();
   });
 
