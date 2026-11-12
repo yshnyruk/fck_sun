@@ -2,6 +2,7 @@ import * as maplibregl from "maplibre-gl";
 import { useEffect, useRef } from "react";
 import { BASE_MAP_STYLE, INITIAL_MAP_VIEW, INITIAL_MAP_ZOOM, MAP_STYLES } from "../map/mapConfig";
 import type { MapStyleName } from "../map/mapConfig";
+import { buildRouteShadeFeatures } from "../map/routeShadeSegments";
 import type { PlannedRoute } from "../routeApi";
 
 type MapViewProps = {
@@ -122,13 +123,16 @@ export function MapView({
       if (rendered || !map.isStyleLoaded()) return;
       rendered = true;
       for (const layerId of [
-        "planned-route-selected-line",
         "planned-route-selected-casing",
+        "planned-route-shade-segments",
+        "planned-route-exposure-segments",
+        "planned-route-unknown-segments",
         "planned-route-alternative-line",
         "planned-route-alternative-casing",
       ]) {
         if (map.getLayer(layerId)) map.removeLayer(layerId);
       }
+      if (map.getSource("planned-route-segments")) map.removeSource("planned-route-segments");
       if (map.getSource("planned-routes")) map.removeSource("planned-routes");
       if (routes.length === 0 || !selectedRouteId) return;
 
@@ -141,6 +145,15 @@ export function MapView({
             properties: { route_id: route.id },
             geometry: route.geometry,
           })),
+        },
+      });
+      const selectedRoute = routes.find((route) => route.id === selectedRouteId);
+      if (!selectedRoute) return;
+      map.addSource("planned-route-segments", {
+        type: "geojson",
+        data: {
+          type: "FeatureCollection",
+          features: buildRouteShadeFeatures(selectedRoute),
         },
       });
       map.addLayer({
@@ -165,19 +178,38 @@ export function MapView({
         source: "planned-routes",
         filter: ["==", ["get", "route_id"], selectedRouteId],
         layout: { "line-cap": "round", "line-join": "round" },
-        paint: { "line-color": "#ffffff", "line-width": 11, "line-opacity": 0.96 },
+        paint: { "line-color": "#ffffff", "line-width": 10, "line-opacity": 0.96 },
       });
       map.addLayer({
-        id: "planned-route-selected-line",
+        id: "planned-route-shade-segments",
         type: "line",
-        source: "planned-routes",
-        filter: ["==", ["get", "route_id"], selectedRouteId],
+        source: "planned-route-segments",
+        filter: ["==", ["get", "classification"], "confirmed_shade"],
         layout: { "line-cap": "round", "line-join": "round" },
-        paint: { "line-color": "#126fc1", "line-width": 6, "line-opacity": 1 },
+        paint: { "line-color": "#23845b", "line-width": 6, "line-opacity": 1 },
+      });
+      map.addLayer({
+        id: "planned-route-exposure-segments",
+        type: "line",
+        source: "planned-route-segments",
+        filter: ["==", ["get", "classification"], "confirmed_exposure"],
+        layout: { "line-cap": "round", "line-join": "round" },
+        paint: { "line-color": "#dc8435", "line-width": 6, "line-opacity": 1 },
+      });
+      map.addLayer({
+        id: "planned-route-unknown-segments",
+        type: "line",
+        source: "planned-route-segments",
+        filter: ["==", ["get", "classification"], "unknown"],
+        layout: { "line-cap": "round", "line-join": "round" },
+        paint: {
+          "line-color": "#75879a",
+          "line-width": 5,
+          "line-dasharray": [1.5, 1.5],
+          "line-opacity": 0.95,
+        },
       });
 
-      const selectedRoute = routes.find((route) => route.id === selectedRouteId);
-      if (!selectedRoute) return;
       const coordinates = selectedRoute.geometry.coordinates;
       const bounds = coordinates.reduce(
         (result, coordinate) => result.extend(coordinate),

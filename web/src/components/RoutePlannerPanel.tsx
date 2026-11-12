@@ -271,6 +271,11 @@ export function RoutePlannerPanel({
               onSelect={() => onSelectRoute(route)}
             />
           ))}
+          <div className="route-shade-legend" aria-label="Route segment shade legend">
+            <span><i className="shaded" aria-hidden="true" />Shaded</span>
+            <span><i className="exposed" aria-hidden="true" />Exposed</span>
+            <span><i className="unknown" aria-hidden="true" />Unknown</span>
+          </div>
         </section>
       )}
     </div>
