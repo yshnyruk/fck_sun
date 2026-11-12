@@ -10,7 +10,7 @@ from api.schemas.routes import (
     RouteRequest,
     RouteResponse,
 )
-from api.services.route_scoring import rank_routes
+from api.services.route_scoring import select_recommended_route
 
 
 class RoutePlanningError(Exception):
@@ -44,10 +44,14 @@ class RoutePlanningService:
             route.id: _coverage_for_route(route)
             for route in routes
         }
-        ranked_routes = rank_routes(routes, coverages, request.shade_preference)
+        recommended_route, alternatives = select_recommended_route(
+            routes,
+            coverages,
+            request.shade_preference,
+        )
         return RouteResponse(
-            recommended_route=ranked_routes[0],
-            alternatives=ranked_routes[1:],
+            recommended_route=recommended_route,
+            alternatives=alternatives,
         )
 
 

@@ -2,7 +2,12 @@ import pytest
 
 from api.schemas.route_coverage import RouteShadeCoverage
 from api.schemas.routes import CoverageConfidence, LineStringGeometry, Route, ShadePreference
-from api.services.route_scoring import DEFAULT_SCORING_WEIGHTS, rank_routes, score_routes
+from api.services.route_scoring import (
+    DEFAULT_SCORING_WEIGHTS,
+    rank_routes,
+    score_routes,
+    select_recommended_route,
+)
 
 
 def route(route_id: str, distance_m: float, duration_s: float) -> Route:
@@ -85,3 +90,22 @@ def test_rank_routes_attaches_scores_and_orders_routes() -> None:
     assert [item.id for item in ranked] == ["fast", "slow"]
     assert ranked[0].score == pytest.approx(0.95)
     assert ranked[1].score is not None
+
+
+def test_select_recommended_route_returns_highest_scoring_route() -> None:
+    routes = [route("shade", 1200, 1200), route("efficient", 1000, 1000)]
+    coverages = {
+        "shade": coverage(1000),
+        "efficient": coverage(0),
+    }
+
+    recommended, alternatives = select_recommended_route(
+        routes,
+        coverages,
+        ShadePreference.FULL,
+    )
+
+    assert recommended.id == "shade"
+    assert recommended.score is not None
+    assert alternatives[0].id == "efficient"
+    assert recommended.score > alternatives[0].score

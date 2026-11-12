@@ -111,6 +111,16 @@ def rank_routes(
     ]
 
 
+def select_recommended_route(
+    routes: Sequence[Route],
+    coverages: Mapping[str, RouteShadeCoverage],
+    preference: ShadePreference,
+) -> tuple[Route, list[Route]]:
+    """Return the highest-scoring route and the remaining alternatives."""
+    ranked_routes = rank_routes(routes, coverages, preference)
+    return ranked_routes[0], ranked_routes[1:]
+
+
 def _effective_weights(
     weights: RouteScoringWeights,
     all_insufficient: bool,
