@@ -5,8 +5,8 @@ import type { MapStyleName } from "../map/mapConfig";
 
 type MapViewProps = {
   mapRef: React.RefObject<maplibregl.Map | null>;
-  onLocationSelect: (location: maplibregl.LngLatLike) => void;
-  onMapClick: () => boolean;
+  onMapLongPress: (location: maplibregl.LngLatLike) => void;
+  onMapShortPress: () => void;
   onMapDragStart: () => void;
   onMapReady: () => void;
   mapStyle: MapStyleName;
@@ -14,14 +14,15 @@ type MapViewProps = {
 
 export function MapView({
   mapRef,
-  onLocationSelect,
-  onMapClick,
+  onMapLongPress,
+  onMapShortPress,
   onMapDragStart,
   onMapReady,
   mapStyle,
 }: MapViewProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const longPressTimerRef = useRef<ReturnType<typeof window.setTimeout> | null>(null);
+  const longPressTriggeredRef = useRef(false);
 
   useEffect(() => {
     const container = containerRef.current;
@@ -44,9 +45,6 @@ export function MapView({
         }
       }
     };
-    const handleMapClick = () => {
-      onMapClick();
-    };
     const clearLongPress = () => {
       if (longPressTimerRef.current !== null) {
         window.clearTimeout(longPressTimerRef.current);
@@ -55,11 +53,20 @@ export function MapView({
     };
     const startLongPress = (event: maplibregl.MapMouseEvent | maplibregl.MapTouchEvent) => {
       clearLongPress();
+      longPressTriggeredRef.current = false;
       const location = event.lngLat;
       longPressTimerRef.current = window.setTimeout(() => {
         longPressTimerRef.current = null;
-        onLocationSelect(location);
+        longPressTriggeredRef.current = true;
+        onMapLongPress(location);
       }, 650);
+    };
+    const handleMapClick = () => {
+      if (longPressTriggeredRef.current) {
+        longPressTriggeredRef.current = false;
+        return;
+      }
+      onMapShortPress();
     };
     const handleMapDragStart = () => {
       clearLongPress();
@@ -91,7 +98,7 @@ export function MapView({
       map.remove();
       mapRef.current = null;
     };
-  }, [mapRef, onLocationSelect, onMapClick, onMapDragStart, onMapReady]);
+  }, [mapRef, onMapLongPress, onMapShortPress, onMapDragStart, onMapReady]);
 
   useEffect(() => {
     if (mapRef.current) {

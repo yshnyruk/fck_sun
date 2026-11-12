@@ -1,16 +1,66 @@
-import { fireEvent, render, screen } from "@testing-library/react";
-import { describe, it, expect, vi } from "vitest";
+import { fireEvent, render, screen, waitForElementToBeRemoved } from "@testing-library/react";
+import { afterEach, beforeEach, describe, it, expect, vi } from "vitest";
+import type { LngLatLike } from "maplibre-gl";
 import App from "./App";
 import { SHADE_PREFERENCES } from "./shadePreferences";
 import { toLocalDateTimeInput, toUtcISOString } from "./planningTime";
 
 vi.mock("./components/MapView", () => ({
-  MapView: ({ onLocationSelect }: { onLocationSelect: (location: [number, number]) => void }) => (
-    <button type="button" onClick={() => onLocationSelect([-73.98, 40.75])}>
-      Set test starting location
-    </button>
+  MapView: ({
+    onMapLongPress,
+    onMapShortPress,
+    onMapReady,
+  }: {
+    onMapLongPress: (location: LngLatLike) => void;
+    onMapShortPress: () => void;
+    onMapReady: () => void;
+  }) => (
+    <>
+      <button type="button" onClick={onMapReady}>
+        Set test starting location
+      </button>
+      <button type="button" onClick={() => onMapLongPress([-73.96, 40.8])}>
+        Long press map
+      </button>
+      <button type="button" onClick={onMapShortPress}>
+        Short press map
+      </button>
+    </>
   ),
 }));
+
+const geolocationDescriptor = Object.getOwnPropertyDescriptor(navigator, "geolocation");
+
+beforeEach(() => {
+  Object.defineProperty(navigator, "geolocation", {
+    configurable: true,
+    value: {
+      getCurrentPosition: (success: PositionCallback) => {
+        success({
+          coords: {
+            latitude: 40.75,
+            longitude: -73.98,
+            accuracy: 10,
+            altitude: null,
+            altitudeAccuracy: null,
+            heading: null,
+            speed: null,
+          },
+          timestamp: Date.now(),
+        } as GeolocationPosition);
+      },
+    },
+  });
+});
+
+afterEach(() => {
+  vi.unstubAllGlobals();
+  if (geolocationDescriptor) {
+    Object.defineProperty(navigator, "geolocation", geolocationDescriptor);
+  } else {
+    Reflect.deleteProperty(navigator, "geolocation");
+  }
+});
 
 async function selectCentralPark(): Promise<void> {
   const destinationInputs = screen.getAllByRole("textbox", {
@@ -27,6 +77,9 @@ async function selectCentralPark(): Promise<void> {
 
   fireEvent.click(await screen.findByRole("button", { name: /Central Park/ }));
   await screen.findByRole("heading", { name: "Central Park" });
+  await waitForElementToBeRemoved(() =>
+    screen.queryByRole("textbox", { name: "Search for a destination" }),
+  );
 }
 
 describe("FckSun frontend", () => {
@@ -84,6 +137,10 @@ describe("FckSun frontend", () => {
     fireEvent.click(screen.getByRole("button", { name: "Set test starting location" }));
 
     await selectCentralPark();
+    expect((screen.getByLabelText("Starting point") as HTMLInputElement).value).toBe(
+      "Current location",
+    );
+    expect((screen.getByLabelText("Destination") as HTMLInputElement).value).toBe("Central Park");
     fireEvent.click(screen.getByRole("tab", { name: "More" }));
     fireEvent.click(screen.getByRole("button", { name: /Planning time:/ }));
     fireEvent.click(await screen.findByRole("option", { name: "Depart at" }));
@@ -117,7 +174,192 @@ describe("FckSun frontend", () => {
     );
   });
 
+  it("reverses the displayed points and submits their reversed coordinates", async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      if (String(input).includes("/search?")) {
+        return {
+          ok: true,
+          json: async () => ({
+            results: [
+              {
+                name: "Central Park",
+                label: "New York, NY",
+                coordinate: { latitude: 40.78, longitude: -73.97 },
+              },
+            ],
+          }),
+        } as Response;
+      }
+      return {
+        ok: true,
+        json: async () => ({ recommended_route: {}, alternatives: [] }),
+      } as Response;
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<App />);
+    fireEvent.click(screen.getByRole("button", { name: "Set test starting location" }));
+    await selectCentralPark();
+    fireEvent.click(screen.getByRole("button", { name: "Reverse starting point and destination" }));
+
+    expect((screen.getByLabelText("Starting point") as HTMLInputElement).value).toBe(
+      "Central Park",
+    );
+    expect((screen.getByLabelText("Destination") as HTMLInputElement).value).toBe(
+      "Current location",
+    );
+    expect(screen.getByText("Device location")).toBeDefined();
+    fireEvent.click(screen.getByRole("button", { name: /Start navigation/ }));
+    await screen.findByRole("button", { name: "Navigation started" });
+
+    const routeRequest = fetchMock.mock.calls.find(([input]) => String(input).endsWith("/routes"));
+    expect(JSON.parse(String(routeRequest?.[1]?.body))).toMatchObject({
+      origin: { latitude: 40.78, longitude: -73.97 },
+      destination: { latitude: 40.75, longitude: -73.98 },
+    });
+  });
+
+  it("uses the current location button to update the route origin", async () => {
+    const getCurrentPosition = vi.fn((success: PositionCallback) => {
+      success({
+        coords: {
+          latitude: 40.71,
+          longitude: -74.01,
+          accuracy: 10,
+          altitude: null,
+          altitudeAccuracy: null,
+          heading: null,
+          speed: null,
+        },
+        timestamp: Date.now(),
+      } as GeolocationPosition);
+    });
+    Object.defineProperty(navigator, "geolocation", {
+      configurable: true,
+      value: { getCurrentPosition },
+    });
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      if (String(input).includes("/search?")) {
+        return {
+          ok: true,
+          json: async () => ({
+            results: [
+              {
+                name: "Central Park",
+                label: "New York, NY",
+                coordinate: { latitude: 40.78, longitude: -73.97 },
+              },
+            ],
+          }),
+        } as Response;
+      }
+      return {
+        ok: true,
+        json: async () => ({ recommended_route: {}, alternatives: [] }),
+      } as Response;
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<App />);
+    fireEvent.click(screen.getByRole("button", { name: "Set test starting location" }));
+    await selectCentralPark();
+    fireEvent.click(screen.getByRole("button", { name: "Use current location as starting point" }));
+
+    expect((screen.getByLabelText("Starting point") as HTMLInputElement).value).toBe(
+      "Current location",
+    );
+    fireEvent.click(screen.getByRole("button", { name: /Start navigation/ }));
+    await screen.findByRole("button", { name: "Navigation started" });
+
+    const routeRequest = fetchMock.mock.calls.find(([input]) => String(input).endsWith("/routes"));
+    expect(JSON.parse(String(routeRequest?.[1]?.body)).origin).toEqual({
+      latitude: 40.71,
+      longitude: -74.01,
+    });
+  });
+
+  it("opens the matching location search when either route point is tapped", async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = new URL(String(input), "http://localhost");
+      if (url.pathname.endsWith("/search")) {
+        const query = url.searchParams.get("q");
+        const result = query === "Union Square"
+          ? {
+              name: "Union Square",
+              label: "Manhattan, NY",
+              coordinate: { latitude: 40.7359, longitude: -73.9911 },
+            }
+          : query === "Brooklyn Bridge"
+            ? {
+                name: "Brooklyn Bridge",
+                label: "New York, NY",
+                coordinate: { latitude: 40.7061, longitude: -73.9969 },
+              }
+            : {
+                name: "Central Park",
+                label: "New York, NY",
+                coordinate: { latitude: 40.78, longitude: -73.97 },
+              };
+        return { ok: true, json: async () => ({ results: [result] }) } as Response;
+      }
+      return {
+        ok: true,
+        json: async () => ({ recommended_route: {}, alternatives: [] }),
+      } as Response;
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<App />);
+    fireEvent.click(screen.getByRole("button", { name: "Set test starting location" }));
+    await selectCentralPark();
+
+    fireEvent.click(screen.getByLabelText("Starting point"));
+    const originSearch = await screen.findByRole("textbox", {
+      name: "Search for a starting point",
+    });
+    fireEvent.change(originSearch, { target: { value: "Union Square" } });
+    fireEvent.click(await screen.findByRole("button", { name: /Union Square/ }));
+    await waitForElementToBeRemoved(() =>
+      screen.queryByRole("textbox", { name: "Search for a starting point" }),
+    );
+    expect((screen.getByLabelText("Starting point") as HTMLInputElement).value).toBe("Union Square");
+    expect((screen.getByLabelText("Destination") as HTMLInputElement).value).toBe("Central Park");
+
+    fireEvent.click(screen.getByLabelText("Destination"));
+    const destinationSearch = await screen.findByRole("textbox", {
+      name: "Search for a destination",
+    });
+    fireEvent.change(destinationSearch, { target: { value: "Brooklyn Bridge" } });
+    fireEvent.click(await screen.findByRole("button", { name: /Brooklyn Bridge/ }));
+    expect((screen.getByLabelText("Starting point") as HTMLInputElement).value).toBe("Union Square");
+    expect((screen.getByLabelText("Destination") as HTMLInputElement).value).toBe("Brooklyn Bridge");
+  });
+
+  it("uses a long press to place the destination while a short press leaves the route unchanged", () => {
+    render(<App />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Short press map" }));
+    expect(screen.queryByRole("region", { name: "Route locations" })).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: "Long press map" }));
+    expect((screen.getByLabelText("Destination") as HTMLInputElement).value).toBe(
+      "Pinned destination",
+    );
+    expect(screen.getByText("40.80000, -73.96000")).toBeDefined();
+
+    fireEvent.click(screen.getByRole("button", { name: "Short press map" }));
+    expect(screen.queryByRole("region", { name: "Route locations" })).toBeNull();
+  });
+
   it("shows a starting location error and skips submission when origin is missing", async () => {
+    Object.defineProperty(navigator, "geolocation", {
+      configurable: true,
+      value: {
+        getCurrentPosition: (_success: PositionCallback, error?: PositionErrorCallback) => {
+          error?.({ code: 1, message: "Location access denied" } as GeolocationPositionError);
+        },
+      },
+    });
     const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
       if (String(input).includes("/search?")) {
         return {

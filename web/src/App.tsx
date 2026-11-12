@@ -37,6 +37,7 @@ const PLANNING_MODES = [
   { value: "arrive_by", label: "Arrive by" },
 ] as const;
 type PlanningMode = (typeof PLANNING_MODES)[number]["value"];
+type SearchTarget = "origin" | "destination";
 
 function isDestinationSearchResult(value: unknown): value is DestinationSearchResult {
   if (!value || typeof value !== "object") return false;
@@ -56,6 +57,7 @@ function App() {
   const [shadowsEnabled, setShadowsEnabled] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
   const [isClosingSearch, setIsClosingSearch] = useState(false);
+  const searchCloseTimeoutRef = useRef<number | null>(null);
   const [panelExpanded, setPanelExpanded] = useState(false);
   const [panelHeight, setPanelHeight] = useState(84);
   const [currentTime] = useState(() => {
@@ -69,9 +71,11 @@ function App() {
   const wasDragged = useRef(false);
   const mapRef = useRef<maplibregl.Map | null>(null);
   const currentLocationMarkerRef = useRef<maplibregl.Marker | null>(null);
+  const destinationMarkerRef = useRef<maplibregl.Marker | null>(null);
   const [selectedLocation, setSelectedLocation] = useState<maplibregl.LngLat | null>(null);
+  const [startingPointLabel, setStartingPointLabel] = useState("Choose a starting point");
+  const [startingPointDetail, setStartingPointDetail] = useState("");
   const selectedLocationRef = useRef<maplibregl.LngLat | null>(null);
-  const selectedMarkerRef = useRef<maplibregl.Marker | null>(null);
   const [shadePreference, setShadePreference] = useState<ShadePreference>("full");
   const [navigationStarted, setNavigationStarted] = useState(false);
   const [routeRequestState, setRouteRequestState] = useState<"idle" | "loading" | "error">("idle");
@@ -79,6 +83,8 @@ function App() {
   const [mapStyle, setMapStyle] = useState<MapStyleName>("default");
   const [mapStyleOpen, setMapStyleOpen] = useState(false);
   const [destinationQuery, setDestinationQuery] = useState("");
+  const [searchTarget, setSearchTarget] = useState<SearchTarget>("destination");
+  const [isPickingDestinationOnMap, setIsPickingDestinationOnMap] = useState(false);
   const [destinationSuggestions, setDestinationSuggestions] = useState<DestinationSearchResult[]>(
     [],
   );
@@ -121,14 +127,25 @@ function App() {
     };
   }, [planningModeMenuOpen]);
   const selectedDestinationRef = useRef<DestinationSearchResult | null>(null);
-  const setStartingLocation = useCallback((location: maplibregl.LngLatLike) => {
-    const lngLat = maplibregl.LngLat.convert(location);
-    if (!Number.isFinite(lngLat.lng) || !Number.isFinite(lngLat.lat)) return;
-    setSelectedLocation(lngLat);
-    selectedLocationRef.current = lngLat;
-  }, []);
+  const setStartingLocation = useCallback(
+    (location: maplibregl.LngLatLike, label = "Current location", detail = "Device location") => {
+      const lngLat = maplibregl.LngLat.convert(location);
+      if (!Number.isFinite(lngLat.lng) || !Number.isFinite(lngLat.lat)) return;
+      setSelectedLocation(lngLat);
+      selectedLocationRef.current = lngLat;
+      setStartingPointLabel(label);
+      setStartingPointDetail(detail);
+      setRouteRequestError(null);
+      setRouteRequestState("idle");
+    },
+    [],
+  );
   const focusCurrentLocation = useCallback(() => {
-    if (!navigator.geolocation) return;
+    if (!navigator.geolocation) {
+      setRouteRequestError("Location access is unavailable. Choose a starting point on the map.");
+      setRouteRequestState("error");
+      return;
+    }
 
     navigator.geolocation.getCurrentPosition(
       (position) => {
@@ -139,8 +156,6 @@ function App() {
         const map = mapRef.current;
         setStartingLocation(location);
         if (!map) return;
-        selectedMarkerRef.current?.remove();
-        selectedMarkerRef.current = null;
         if (currentLocationMarkerRef.current) {
           currentLocationMarkerRef.current.setLngLat(location);
         } else {
@@ -165,6 +180,8 @@ function App() {
       },
       (error) => {
         console.error("Unable to determine the user's current location.", error);
+        setRouteRequestError("Could not get your location. Choose a starting point on the map.");
+        setRouteRequestState("error");
       },
       { enableHighAccuracy: true, maximumAge: 30_000, timeout: 10_000 },
     );
@@ -172,14 +189,24 @@ function App() {
 
   useEffect(() => {
     return () => {
+      if (searchCloseTimeoutRef.current !== null) {
+        window.clearTimeout(searchCloseTimeoutRef.current);
+      }
       currentLocationMarkerRef.current?.remove();
       currentLocationMarkerRef.current = null;
+      destinationMarkerRef.current?.remove();
+      destinationMarkerRef.current = null;
     };
   }, []);
 
   useEffect(() => {
     const query = destinationQuery.trim();
-    if (query.length < 2 || selectedDestination?.name === query) return;
+    if (
+      query.length < 2 ||
+      (searchTarget === "destination" && selectedDestination?.name === query)
+    ) {
+      return;
+    }
 
     const controller = new AbortController();
     const timeout = window.setTimeout(async () => {
@@ -190,7 +217,7 @@ function App() {
           { signal: controller.signal },
         );
         if (!response.ok) {
-          throw new Error(`Destination search failed with status ${response.status}`);
+          throw new Error(`Location search failed with status ${response.status}`);
         }
         const data: unknown = await response.json();
         if (
@@ -199,16 +226,16 @@ function App() {
           !("results" in data) ||
           !Array.isArray(data.results)
         ) {
-          throw new Error("Destination search returned an invalid response.");
+          throw new Error("Location search returned an invalid response.");
         }
         if (!data.results.every(isDestinationSearchResult)) {
-          throw new Error("Destination search returned invalid results.");
+          throw new Error("Location search returned invalid results.");
         }
         setDestinationSuggestions(data.results);
         setDestinationSearchState("idle");
       } catch (error) {
         if (error instanceof DOMException && error.name === "AbortError") return;
-        console.error("Unable to search for destinations.", error);
+        console.error("Unable to search for locations.", error);
         setDestinationSuggestions([]);
         setDestinationSearchState("error");
       }
@@ -218,34 +245,52 @@ function App() {
       window.clearTimeout(timeout);
       controller.abort();
     };
-  }, [destinationQuery, selectedDestination]);
+  }, [destinationQuery, searchTarget, selectedDestination]);
 
   const handleDestinationQueryChange = (value: string) => {
     setDestinationQuery(value);
-    setNavigationStarted(false);
+    if (searchTarget === "destination") setNavigationStarted(false);
     setDestinationSuggestions([]);
     setDestinationSearchState("idle");
-    if (selectedDestination && value !== selectedDestination.name) {
-      setSelectedDestination(null);
-      selectedDestinationRef.current = null;
-    }
+    setRouteRequestError(null);
   };
   const handleDestinationSelect = (destination: DestinationSearchResult) => {
-    setDestinationQuery(destination.name);
-    setSelectedDestination(destination);
-    selectedDestinationRef.current = destination;
+    const selectedOrigin = searchTarget === "origin";
+    if (selectedOrigin) {
+      setStartingLocation(
+        [destination.coordinate.longitude, destination.coordinate.latitude],
+        destination.name,
+        destination.label,
+      );
+      setDestinationQuery("");
+    } else {
+      destinationMarkerRef.current?.remove();
+      destinationMarkerRef.current = null;
+      setDestinationQuery(destination.name);
+      setSelectedDestination(destination);
+      selectedDestinationRef.current = destination;
+      if (!selectedLocationRef.current) focusCurrentLocation();
+    }
     setNavigationStarted(false);
     setRouteRequestError(null);
     setRouteRequestState("idle");
     setDestinationSuggestions([]);
     setDestinationSearchState("idle");
     setIsClosingSearch(true);
-    window.setTimeout(() => {
+    if (searchCloseTimeoutRef.current !== null) {
+      window.clearTimeout(searchCloseTimeoutRef.current);
+    }
+    searchCloseTimeoutRef.current = window.setTimeout(() => {
       setSearchOpen(false);
       setIsClosingSearch(false);
       setPanelExpanded(true);
       setPanelHeight(Math.round(window.innerHeight * 0.4));
       setDragDistance(0);
+      if (selectedOrigin) {
+        setSearchTarget("destination");
+        setDestinationQuery(selectedDestinationRef.current?.name ?? "");
+      }
+      searchCloseTimeoutRef.current = null;
     }, 260);
   };
   const startNavigation = async () => {
@@ -336,52 +381,98 @@ function App() {
   const maxPanelHeight = Math.round(window.innerHeight * 0.9);
   const sheetHeight = `${Math.min(maxPanelHeight, Math.max(collapsedHeight, restingHeight + dragDistance))}px`;
   const panelAtMaximum = panelHeight >= maxPanelHeight;
-  const handleLocationSelect = useCallback((location: maplibregl.LngLatLike) => {
+  const clearDestination = useCallback(() => {
+    if (!selectedDestinationRef.current) return;
+    destinationMarkerRef.current?.remove();
+    destinationMarkerRef.current = null;
+    selectedDestinationRef.current = null;
+    setSelectedDestination(null);
+    setDestinationQuery("");
+    setDestinationSuggestions([]);
+    setDestinationSearchState("idle");
+    setNavigationStarted(false);
+    setRouteRequestError(null);
+    setRouteRequestState("idle");
+    setPanelExpanded(false);
+    setPanelHeight(collapsedHeight);
+    setDragDistance(0);
+  }, []);
+  const handleMapShortPress = useCallback(() => {
+    clearDestination();
+  }, [clearDestination]);
+  const handleMapLongPress = useCallback((location: maplibregl.LngLatLike) => {
     const lngLat = maplibregl.LngLat.convert(location);
     if (!Number.isFinite(lngLat.lng) || !Number.isFinite(lngLat.lat)) return;
 
-    if (
-      selectedLocationRef.current &&
-      Math.abs(selectedLocationRef.current.lng - lngLat.lng) < 0.00001 &&
-      Math.abs(selectedLocationRef.current.lat - lngLat.lat) < 0.00001
-    ) {
-      selectedMarkerRef.current?.remove();
-      selectedMarkerRef.current = null;
-      setSelectedLocation(null);
-      selectedLocationRef.current = null;
-      setRouteRequestError(null);
-      setRouteRequestState("idle");
-      return;
-    }
-
-    selectedMarkerRef.current?.remove();
-    const marker = mapRef.current
-      ? new maplibregl.Marker({ color: "#247acb" }).setLngLat(lngLat).addTo(mapRef.current)
-      : null;
-    if (marker) {
-      marker.getElement().addEventListener("click", (event) => {
-        event.stopPropagation();
-        marker.remove();
-        selectedMarkerRef.current = null;
-        selectedLocationRef.current = null;
-        setSelectedLocation(null);
-      });
-    }
-    selectedMarkerRef.current = marker;
-    selectedLocationRef.current = lngLat;
-    setSelectedLocation(lngLat);
+    const destination: DestinationSearchResult = {
+      name: "Pinned destination",
+      label: `${lngLat.lat.toFixed(5)}, ${lngLat.lng.toFixed(5)}`,
+      coordinate: { latitude: lngLat.lat, longitude: lngLat.lng },
+    };
+    selectedDestinationRef.current = destination;
+    setSelectedDestination(destination);
+    setDestinationQuery(destination.name);
+    setNavigationStarted(false);
     setRouteRequestError(null);
     setRouteRequestState("idle");
-  }, []);
-  const handleMapClick = useCallback(() => {
-    if (!selectedMarkerRef.current) return false;
+    setIsPickingDestinationOnMap(false);
+    setSearchOpen(false);
+    setIsClosingSearch(false);
+    setDestinationSuggestions([]);
+    setDestinationSearchState("idle");
+    setPanelExpanded(true);
+    setPanelHeight(Math.round(window.innerHeight * 0.4));
+    if (!selectedLocationRef.current) focusCurrentLocation();
 
-    selectedMarkerRef.current?.remove();
-    selectedMarkerRef.current = null;
-    selectedLocationRef.current = null;
-    setSelectedLocation(null);
-    return true;
-  }, []);
+    const map = mapRef.current;
+    if (map) {
+      destinationMarkerRef.current?.remove();
+      const markerElement = document.createElement("div");
+      markerElement.className = "destination-location-marker";
+      markerElement.setAttribute("aria-label", "Pinned destination");
+      destinationMarkerRef.current = new maplibregl.Marker({
+        element: markerElement,
+        anchor: "center",
+      })
+        .setLngLat(lngLat)
+        .addTo(map);
+      destinationMarkerRef.current.getElement().addEventListener("click", (event) => {
+        event.stopPropagation();
+        clearDestination();
+      });
+    }
+  }, [clearDestination, focusCurrentLocation]);
+  const reverseRoutePoints = () => {
+    if (!selectedDestination || !selectedLocation) return;
+
+    const previousDestination = selectedDestination;
+    const previousOrigin = selectedLocation;
+    const previousOriginLabel = startingPointLabel;
+    const previousOriginDetail = startingPointDetail;
+    destinationMarkerRef.current?.remove();
+    destinationMarkerRef.current = null;
+    const nextOrigin = maplibregl.LngLat.convert([
+      previousDestination.coordinate.longitude,
+      previousDestination.coordinate.latitude,
+    ]);
+    const nextDestination: DestinationSearchResult = {
+      name: previousOriginLabel,
+      label: previousOriginDetail || "Selected starting point",
+      coordinate: { latitude: previousOrigin.lat, longitude: previousOrigin.lng },
+    };
+
+    selectedLocationRef.current = nextOrigin;
+    setSelectedLocation(nextOrigin);
+    setStartingPointLabel(previousDestination.name);
+    setStartingPointDetail(previousDestination.label);
+    setSelectedDestination(nextDestination);
+    selectedDestinationRef.current = nextDestination;
+    setSearchTarget("destination");
+    setDestinationQuery(nextDestination.name);
+    setNavigationStarted(false);
+    setRouteRequestError(null);
+    setRouteRequestState("idle");
+  };
   const resetExpandedMapControls = useCallback(() => {
     setMapStyleOpen(false);
     setIsClosingSearch(false);
@@ -394,22 +485,43 @@ function App() {
     setIsDragging(false);
     dragStart.current = null;
   }, []);
-  const openSearchScreen = () => {
+  const openSearchScreen = (target: SearchTarget = "destination") => {
+    if (searchCloseTimeoutRef.current !== null) {
+      window.clearTimeout(searchCloseTimeoutRef.current);
+      searchCloseTimeoutRef.current = null;
+    }
+    setSearchTarget(target);
+    setDestinationQuery(target === "destination" && !selectedDestinationRef.current ? destinationQuery : "");
+    setDestinationSuggestions([]);
+    setDestinationSearchState("idle");
     setIsClosingSearch(false);
     setSearchOpen(true);
   };
   const closeSearchScreen = () => {
     setIsClosingSearch(true);
-    window.setTimeout(() => {
+    if (searchCloseTimeoutRef.current !== null) {
+      window.clearTimeout(searchCloseTimeoutRef.current);
+    }
+    searchCloseTimeoutRef.current = window.setTimeout(() => {
       setSearchOpen(false);
       setIsClosingSearch(false);
-      setPanelExpanded(false);
-      setPanelHeight(collapsedHeight);
+      if (!selectedDestinationRef.current) {
+        setPanelExpanded(false);
+        setPanelHeight(collapsedHeight);
+      }
       setDragDistance(0);
+      searchCloseTimeoutRef.current = null;
     }, 260);
   };
   const handlePointerDown = (event: React.PointerEvent<HTMLElement>) => {
     if (searchOpen) return;
+    if (
+      (event.target as HTMLElement).closest(
+        "button, input, select, textarea, [role='button'], [role='option'], [role='tab']",
+      )
+    ) {
+      return;
+    }
     dragStart.current = { y: event.clientY, height: restingHeight };
     wasDragged.current = false;
     setIsDragging(true);
@@ -480,16 +592,74 @@ function App() {
       >
         <MapView
           mapRef={mapRef}
-          onLocationSelect={handleLocationSelect}
-          onMapClick={handleMapClick}
+          onMapLongPress={handleMapLongPress}
+          onMapShortPress={handleMapShortPress}
           onMapDragStart={resetExpandedMapControls}
           onMapReady={focusCurrentLocation}
           mapStyle={mapStyle}
         />
-        {selectedLocation && (
-          <div className="selected-location" role="status" aria-live="polite">
-            Starting location selected: {selectedLocation.lat.toFixed(5)},{" "}
-            {selectedLocation.lng.toFixed(5)}
+        {selectedDestination && (
+          <section className="route-points-card" aria-label="Route locations">
+            <div className="route-points-fields">
+              <div className="route-point-field">
+                <span className="route-point-symbol route-point-origin" aria-hidden="true" />
+                <input
+                  aria-label="Starting point"
+                  type="text"
+                  value={startingPointLabel}
+                  readOnly
+                  onClick={() => openSearchScreen("origin")}
+                />
+                <button
+                  className="use-current-location"
+                  type="button"
+                  aria-label="Use current location as starting point"
+                  title="Use current location"
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    focusCurrentLocation();
+                  }}
+                >
+                  <Icon name="crosshair" />
+                </button>
+              </div>
+              <div className="route-point-field">
+                <span className="route-point-symbol route-point-destination" aria-hidden="true" />
+                <input
+                  aria-label="Destination"
+                  type="text"
+                  value={selectedDestination.name}
+                  readOnly
+                  onClick={() => openSearchScreen("destination")}
+                />
+              </div>
+            </div>
+            <button
+              className="reverse-route-points"
+              type="button"
+              aria-label="Reverse starting point and destination"
+              title="Reverse route"
+              disabled={!selectedLocation}
+              onClick={(event) => {
+                event.stopPropagation();
+                reverseRoutePoints();
+              }}
+            >
+              <Icon name="swap" />
+            </button>
+          </section>
+        )}
+        {isPickingDestinationOnMap && (
+          <div className="map-pick-hint" role="status">
+            <span>Long-press the map to place the destination</span>
+            <button
+              type="button"
+              onClick={() => {
+                setIsPickingDestinationOnMap(false);
+              }}
+            >
+              Cancel
+            </button>
           </div>
         )}
 
@@ -619,11 +789,11 @@ function App() {
             <div className="search-row mx-auto max-w-[600px]">
               <Icon name="search" />
               <input
-                aria-label="Search for a destination"
-                placeholder="Where to?"
+                  aria-label={searchTarget === "origin" ? "Search for a starting point" : "Search for a destination"}
+                  placeholder={searchTarget === "origin" ? "Starting point" : "Where to?"}
                 value={destinationQuery}
                 onChange={(event) => handleDestinationQueryChange(event.target.value)}
-                onFocus={openSearchScreen}
+                  onFocus={() => openSearchScreen()}
               />
               <button
                 className="search-arrow"
@@ -665,6 +835,8 @@ function App() {
                   aria-label="Choose a different destination"
                   onClick={(event) => {
                     event.stopPropagation();
+                    destinationMarkerRef.current?.remove();
+                    destinationMarkerRef.current = null;
                     setSelectedDestination(null);
                     selectedDestinationRef.current = null;
                     setDestinationQuery("");
@@ -804,29 +976,47 @@ function App() {
                 </button>
                 <input
                   autoFocus
-                  aria-label="Search for a destination"
-                  placeholder="Where to?"
+                  aria-label={searchTarget === "origin" ? "Search for a starting point" : "Search for a destination"}
+                  placeholder={searchTarget === "origin" ? "Search for a starting point" : "Where to?"}
                   value={destinationQuery}
                   onChange={(event) => handleDestinationQueryChange(event.target.value)}
                 />
               </div>
+              {searchTarget === "destination" && (
+                <button
+                  className="choose-on-map"
+                  type="button"
+                  onClick={() => {
+                    setIsPickingDestinationOnMap(true);
+                    setDestinationSearchState("idle");
+                    setDestinationSuggestions([]);
+                    setIsClosingSearch(false);
+                    setSearchOpen(false);
+                  }}
+                >
+                  <Icon name="crosshair" />
+                  Choose on map
+                </button>
+              )}
             </div>
             <div className="recent-destinations">
               {destinationSearchState === "loading" && (
-                <p role="status">Searching destinations...</p>
+                <p role="status">Searching locations...</p>
               )}
               {destinationSearchState === "error" && (
                 <p className="location-error" role="alert">
-                  Destination search is unavailable. Try again.
+                  Location search is unavailable. Try again.
                 </p>
               )}
               {destinationSearchState === "idle" &&
                 destinationQuery.trim().length >= 2 &&
                 destinationSuggestions.length === 0 &&
-                !selectedDestination && <p>No matching destinations found.</p>}
+                <p>
+                  No matching {searchTarget === "origin" ? "starting points" : "destinations"} found.
+                </p>}
               {destinationSuggestions.length > 0 && (
                 <>
-                  <p>Matching destinations</p>
+                  <p>{searchTarget === "origin" ? "Matching starting points" : "Matching destinations"}</p>
                   {destinationSuggestions.map((destination) => (
                     <button
                       type="button"
@@ -844,7 +1034,7 @@ function App() {
                   ))}
                 </>
               )}
-              {destinationQuery.trim().length < 2 && (
+              {destinationQuery.trim().length < 2 && searchTarget === "destination" && (
                 <>
                   <p>Recent destinations</p>
                   {recentDestinations.map((destination) => (

@@ -24,7 +24,7 @@
 
 .map-canvas > .maplibre-map {
   position: absolute;
-  z-index: 0;
+  z-index: 2;
   inset: 0;
   width: 100%;
   height: 100%;
@@ -118,26 +118,186 @@
   height: 22px;
 }
 
-.selected-location {
+.route-points-card {
   position: absolute;
-  z-index: 7;
-  top: 16px;
+  z-index: 8;
+  top: max(16px, env(safe-area-inset-top));
   left: 50%;
-  max-width: calc(100% - 32px);
-  padding: 8px 12px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 38px;
+  align-items: center;
+  gap: 9px;
+  width: min(560px, calc(100% - 32px));
+  padding: 10px;
   transform: translateX(-50%);
-  border: 1px solid rgba(36, 122, 203, 0.18);
+  border: 1px solid rgba(210, 224, 236, 0.92);
+  border-radius: 17px;
+  background: rgba(255, 255, 255, 0.97);
+  box-shadow: 0 8px 28px rgba(25, 59, 91, 0.18);
+  backdrop-filter: blur(14px);
+}
+
+.map-pick-hint {
+  position: absolute;
+  z-index: 9;
+  top: 50%;
+  left: 50%;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  max-width: calc(100% - 32px);
+  padding: 9px 10px 9px 14px;
+  transform: translate(-50%, -50%);
+  border: 1px solid rgba(210, 224, 236, 0.95);
   border-radius: 999px;
-  color: #1d5c9b;
-  background: rgba(255, 255, 255, 0.94);
-  box-shadow: 0 4px 14px rgba(31, 72, 109, 0.18);
+  color: #294b68;
+  background: rgba(255, 255, 255, 0.97);
+  box-shadow: 0 6px 20px rgba(25, 59, 91, 0.18);
   font-size: 12px;
   font-weight: 700;
-  white-space: nowrap;
+  pointer-events: none;
+}
+
+.map-pick-hint button {
+  min-height: 30px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 999px;
+  color: #226ba8;
+  background: #eaf4fc;
+  font: inherit;
+  pointer-events: auto;
+}
+
+.route-points-fields {
+  display: grid;
+  min-width: 0;
+  gap: 7px;
+}
+
+.route-point-field {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  height: 44px;
+  padding: 0 8px 0 12px;
+  border: 1px solid #e0e9f0;
+  border-radius: 11px;
+  background: #fbfdff;
+}
+
+.route-point-field:focus-within {
+  border-color: #a7c9e4;
+}
+
+.route-point-field:hover {
+  border-color: #c6d9e8;
+}
+
+.route-point-symbol {
+  display: block;
+  flex: none;
+  width: 10px;
+  height: 10px;
+}
+
+.route-point-origin {
+  border: 2px solid #18815f;
+  border-radius: 50%;
+  background: #d8f2e8;
+  box-shadow: inset 0 0 0 2px white;
+}
+
+.route-point-destination {
+  border: 2px solid #d85862;
+  border-radius: 3px;
+  background: #ffdee0;
+  transform: rotate(45deg) scale(0.82);
+}
+
+.route-point-field input {
+  flex: 1;
+  width: 100%;
+  min-width: 0;
+  height: 100%;
+  padding: 0;
+  border: 0;
+  outline: 0;
+  color: #294b68;
+  background: transparent;
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  cursor: pointer;
+}
+
+.route-point-field input:focus-visible {
+  outline: 0;
+}
+
+.use-current-location,
+.reverse-route-points {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: 0;
+  border-radius: 9px;
+  color: #2875b1;
+  background: #edf5fb;
+  transition:
+    color 140ms ease,
+    background 140ms ease,
+    transform 140ms ease;
+}
+
+.use-current-location:hover,
+.reverse-route-points:hover:not(:disabled) {
+  color: #145d98;
+  background: #e1eff9;
+}
+
+.use-current-location:active,
+.reverse-route-points:active:not(:disabled) {
+  transform: scale(0.94);
+}
+
+.use-current-location .icon {
+  width: 18px;
+  height: 18px;
+}
+
+.reverse-route-points {
+  width: 36px;
+  height: 36px;
+  border: 1px solid #dce8f1;
+  border-radius: 50%;
+  background: white;
+  box-shadow: 0 2px 5px rgba(24, 57, 93, 0.08);
+}
+
+.reverse-route-points .icon {
+  width: 19px;
+  height: 19px;
+  transform: rotate(90deg);
+}
+
+.reverse-route-points:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+.map-canvas:has(.route-points-card) .map-style-control {
+  top: 145px !important;
 }
 
 .current-location-marker {
   position: relative;
+  z-index: 3;
   width: 24px;
   height: 24px;
   border: 3px solid white;
@@ -147,6 +307,25 @@
     0 1px 5px rgba(22, 57, 92, 0.4),
     0 0 0 8px rgba(53, 139, 220, 0.15);
   cursor: pointer;
+}
+
+.destination-location-marker {
+  position: relative;
+  z-index: 3;
+  width: 26px;
+  height: 26px;
+  border: 3px solid white;
+  border-radius: 50%;
+  background: #d85862;
+  box-shadow: 0 2px 8px rgba(75, 33, 39, 0.38);
+}
+
+.destination-location-marker::after {
+  position: absolute;
+  inset: 6px;
+  border-radius: 50%;
+  background: white;
+  content: "";
 }
 
 .current-location-marker::before {
@@ -376,6 +555,26 @@
 .search-screen .search-row {
   width: 100%;
   max-width: 600px;
+}
+
+.choose-on-map {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 38px;
+  margin-top: 9px;
+  padding: 0 11px;
+  border: 1px solid #d9e8f3;
+  border-radius: 11px;
+  color: #226ba8;
+  background: #f7fbff;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.choose-on-map .icon {
+  width: 17px;
+  height: 17px;
 }
 
 .search-screen .recent-destinations {
@@ -981,8 +1180,46 @@
 }
 
 @media (max-width: 430px) {
+  .route-points-card {
+    top: max(60px, env(safe-area-inset-top));
+    grid-template-columns: minmax(0, 1fr) 34px;
+    gap: 6px;
+    width: calc(100% - 24px);
+    padding: 8px;
+    border-radius: 15px;
+  }
+
+  .route-points-fields {
+    gap: 6px;
+  }
+
+  .route-point-field {
+    height: 42px;
+    gap: 8px;
+    padding-left: 10px;
+  }
+
+  .route-point-field input {
+    font-size: 12px;
+  }
+
+  .reverse-route-points {
+    width: 32px;
+    height: 32px;
+  }
+
   .time-dial {
     transform: translateX(-50%) scale(0.9);
     transform-origin: bottom center;
+  }
+}
+
+@media (max-width: 699px) {
+  .route-points-card {
+    top: max(60px, env(safe-area-inset-top));
+  }
+
+  .map-canvas:has(.route-points-card) .map-style-control {
+    top: 180px !important;
   }
 }

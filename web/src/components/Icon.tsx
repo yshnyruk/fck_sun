@@ -13,7 +13,8 @@ export type IconName =
   | "shadow"
   | "sun"
   | "sunrise"
-  | "sunset";
+  | "sunset"
+  | "swap";
 
 export function Icon({ name }: { name: IconName }) {
   const paths: Record<IconName, ReactNode> = {
@@ -68,6 +69,7 @@ export function Icon({ name }: { name: IconName }) {
         <path d="M3 18h18M6 15a6 6 0 0 1 12 0M12 3v3M5.6 7.6l2 2M18.4 7.6l-2 2" />
       </>
     ),
+    swap: <path d="M7 7h13l-3-3M17 17H4l3 3M20 7l-3 3M4 17l3-3" />,
   };
 
   return (
