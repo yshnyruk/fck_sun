@@ -35,6 +35,10 @@ DEFAULT_SCORING_WEIGHTS: Mapping[ShadePreference, RouteScoringWeights] = Mapping
     }
 )
 
+MIN_ALTERNATIVE_DISTANCE_DIFFERENCE = 0.10
+MIN_ALTERNATIVE_DURATION_DIFFERENCE = 0.10
+MIN_ALTERNATIVE_SHADE_DIFFERENCE = 0.10
+
 
 @dataclass(frozen=True)
 class RouteScore:
@@ -116,9 +120,36 @@ def select_recommended_route(
     coverages: Mapping[str, RouteShadeCoverage],
     preference: ShadePreference,
 ) -> tuple[Route, list[Route]]:
-    """Return the highest-scoring route and the remaining alternatives."""
+    """Return the highest-scoring route and meaningful alternatives."""
     ranked_routes = rank_routes(routes, coverages, preference)
-    return ranked_routes[0], ranked_routes[1:]
+    recommended = ranked_routes[0]
+    alternatives = [
+        route
+        for route in ranked_routes[1:]
+        if _is_meaningful_alternative(route, recommended, coverages)
+    ]
+    return recommended, alternatives
+
+
+def _is_meaningful_alternative(
+    candidate: Route,
+    recommended: Route,
+    coverages: Mapping[str, RouteShadeCoverage],
+) -> bool:
+    distance_difference = (
+        abs(candidate.distance_m - recommended.distance_m) / recommended.distance_m
+    )
+    duration_difference = (
+        abs(candidate.duration_s - recommended.duration_s) / recommended.duration_s
+    )
+    candidate_shade = _shade_ratio(candidate, coverages)
+    recommended_shade = _shade_ratio(recommended, coverages)
+    shade_difference = abs(candidate_shade - recommended_shade)
+    return (
+        distance_difference >= MIN_ALTERNATIVE_DISTANCE_DIFFERENCE
+        or duration_difference >= MIN_ALTERNATIVE_DURATION_DIFFERENCE
+        or shade_difference >= MIN_ALTERNATIVE_SHADE_DIFFERENCE
+    )
 
 
 def _effective_weights(
@@ -142,9 +173,7 @@ def _score_route(
     shortest_duration: float,
     weights: RouteScoringWeights,
 ) -> RouteScore:
-    shade_score = coverage.shaded_distance_m / coverage.total_distance_m
-    if coverage.coverage_confidence is CoverageConfidence.INSUFFICIENT:
-        shade_score = 0
+    shade_score = _coverage_shade_ratio(coverage)
     distance_score = shortest_distance / route.distance_m
     duration_score = shortest_duration / route.duration_s
     score = (
@@ -160,3 +189,13 @@ def _score_route(
         duration_score=duration_score,
         weights=weights,
     )
+
+
+def _shade_ratio(route: Route, coverages: Mapping[str, RouteShadeCoverage]) -> float:
+    return _coverage_shade_ratio(coverages[route.id])
+
+
+def _coverage_shade_ratio(coverage: RouteShadeCoverage) -> float:
+    if coverage.coverage_confidence is CoverageConfidence.INSUFFICIENT:
+        return 0
+    return coverage.shaded_distance_m / coverage.total_distance_m

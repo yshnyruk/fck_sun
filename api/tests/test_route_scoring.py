@@ -109,3 +109,45 @@ def test_select_recommended_route_returns_highest_scoring_route() -> None:
     assert recommended.score is not None
     assert alternatives[0].id == "efficient"
     assert recommended.score > alternatives[0].score
+
+
+def test_select_recommended_route_omits_near_duplicate_alternatives() -> None:
+    routes = [
+        route("recommended", 1000, 1000),
+        route("near-duplicate", 1050, 1050),
+        route("meaningful", 1200, 1000),
+    ]
+    coverages = {
+        "recommended": coverage(500),
+        "near-duplicate": coverage(500),
+        "meaningful": coverage(500),
+    }
+
+    recommended, alternatives = select_recommended_route(
+        routes,
+        coverages,
+        ShadePreference.NO_SHADOW,
+    )
+
+    assert recommended.id == "recommended"
+    assert [route.id for route in alternatives] == ["meaningful"]
+    assert alternatives[0].distance_m == 1200
+    assert alternatives[0].duration_s == 1000
+    assert alternatives[0].score is not None
+
+
+def test_shade_difference_makes_equal_metric_route_meaningful() -> None:
+    routes = [route("recommended", 1000, 1000), route("shadier", 1000, 1000)]
+    coverages = {
+        "recommended": coverage(200),
+        "shadier": coverage(400),
+    }
+
+    recommended, alternatives = select_recommended_route(
+        routes,
+        coverages,
+        ShadePreference.FULL,
+    )
+
+    assert recommended.id == "shadier"
+    assert [route.id for route in alternatives] == ["recommended"]
