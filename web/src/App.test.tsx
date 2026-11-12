@@ -33,7 +33,13 @@ const geolocationDescriptor = Object.getOwnPropertyDescriptor(navigator, "geoloc
 const routeResponse = {
   recommended_route: {
     id: "route-1",
-    geometry: { type: "LineString", coordinates: [[-73.98, 40.75], [-73.97, 40.78]] },
+    geometry: {
+      type: "LineString",
+      coordinates: [
+        [-73.98, 40.75],
+        [-73.97, 40.78],
+      ],
+    },
     distance_m: 1200,
     duration_s: 900,
     score: 0.8,
@@ -128,7 +134,8 @@ describe("FckSun frontend", () => {
 
   it("submits selected route inputs and displays loading while the request is pending", async () => {
     let finishRouteRequest: ((response: Response) => void) | undefined;
-    const fetchMock = vi.fn((input: RequestInfo | URL, _init?: RequestInit) => {
+    const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      void init;
       const url = String(input);
       if (url.includes("/search?")) {
         return Promise.resolve({
@@ -196,7 +203,8 @@ describe("FckSun frontend", () => {
   });
 
   it("reverses the displayed points and submits their reversed coordinates", async () => {
-    const fetchMock = vi.fn(async (input: RequestInfo | URL, _init?: RequestInit) => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      void init;
       if (String(input).includes("/search?")) {
         return {
           ok: true,
@@ -259,7 +267,8 @@ describe("FckSun frontend", () => {
       configurable: true,
       value: { getCurrentPosition },
     });
-    const fetchMock = vi.fn(async (input: RequestInfo | URL, _init?: RequestInit) => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      void init;
       if (String(input).includes("/search?")) {
         return {
           ok: true,
@@ -300,27 +309,29 @@ describe("FckSun frontend", () => {
   });
 
   it("opens the matching location search when either route point is tapped", async () => {
-    const fetchMock = vi.fn(async (input: RequestInfo | URL, _init?: RequestInit) => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      void init;
       const url = new URL(String(input), "http://localhost");
       if (url.pathname.endsWith("/search")) {
         const query = url.searchParams.get("q");
-        const result = query === "Union Square"
-          ? {
-              name: "Union Square",
-              label: "Manhattan, NY",
-              coordinate: { latitude: 40.7359, longitude: -73.9911 },
-            }
-          : query === "Brooklyn Bridge"
+        const result =
+          query === "Union Square"
             ? {
-                name: "Brooklyn Bridge",
-                label: "New York, NY",
-                coordinate: { latitude: 40.7061, longitude: -73.9969 },
+                name: "Union Square",
+                label: "Manhattan, NY",
+                coordinate: { latitude: 40.7359, longitude: -73.9911 },
               }
-            : {
-                name: "Central Park",
-                label: "New York, NY",
-                coordinate: { latitude: 40.78, longitude: -73.97 },
-              };
+            : query === "Brooklyn Bridge"
+              ? {
+                  name: "Brooklyn Bridge",
+                  label: "New York, NY",
+                  coordinate: { latitude: 40.7061, longitude: -73.9969 },
+                }
+              : {
+                  name: "Central Park",
+                  label: "New York, NY",
+                  coordinate: { latitude: 40.78, longitude: -73.97 },
+                };
         return { ok: true, json: async () => ({ results: [result] }) } as Response;
       }
       return {
@@ -343,7 +354,9 @@ describe("FckSun frontend", () => {
     await waitForElementToBeRemoved(() =>
       screen.queryByRole("textbox", { name: "Search for a starting point" }),
     );
-    expect((screen.getByLabelText("Starting point") as HTMLInputElement).value).toBe("Union Square");
+    expect((screen.getByLabelText("Starting point") as HTMLInputElement).value).toBe(
+      "Union Square",
+    );
     expect((screen.getByLabelText("Destination") as HTMLInputElement).value).toBe("Central Park");
 
     fireEvent.click(screen.getByLabelText("Destination"));
@@ -352,8 +365,12 @@ describe("FckSun frontend", () => {
     });
     fireEvent.change(destinationSearch, { target: { value: "Brooklyn Bridge" } });
     fireEvent.click(await screen.findByRole("button", { name: /Brooklyn Bridge/ }));
-    expect((screen.getByLabelText("Starting point") as HTMLInputElement).value).toBe("Union Square");
-    expect((screen.getByLabelText("Destination") as HTMLInputElement).value).toBe("Brooklyn Bridge");
+    expect((screen.getByLabelText("Starting point") as HTMLInputElement).value).toBe(
+      "Union Square",
+    );
+    expect((screen.getByLabelText("Destination") as HTMLInputElement).value).toBe(
+      "Brooklyn Bridge",
+    );
   });
 
   it("uses a long press to place the destination while a short press leaves the route unchanged", () => {
@@ -381,7 +398,8 @@ describe("FckSun frontend", () => {
         },
       },
     });
-    const fetchMock = vi.fn(async (input: RequestInfo | URL, _init?: RequestInit) => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      void init;
       if (String(input).includes("/search?")) {
         return {
           ok: true,
@@ -414,7 +432,8 @@ describe("FckSun frontend", () => {
   });
 
   it("rejects a past scheduled departure before sending a route request", async () => {
-    const fetchMock = vi.fn(async (input: RequestInfo | URL, _init?: RequestInit) => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      void init;
       if (String(input).includes("/search?")) {
         return {
           ok: true,

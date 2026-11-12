@@ -1,11 +1,14 @@
 import * as maplibregl from "maplibre-gl";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Icon } from "./components/Icon";
+import { LocationSearchOverlay } from "./components/LocationSearchOverlay";
+import { RoutePlannerPanel, type DestinationSearchResult } from "./components/RoutePlannerPanel";
 import { MapView } from "./components/MapView";
 import { config } from "./config";
 import { parseRoutePlanningResponse, type RoutePlanningResponse } from "./routeApi";
 import type { MapStyleName } from "./map/mapConfig";
-import { SHADE_PREFERENCES, type ShadePreference } from "./shadePreferences";
+import { PLANNING_MODES, type PlanningMode } from "./planningModes";
+import type { ShadePreference } from "./shadePreferences";
 import { toLocalDateTimeInput, toUtcISOString } from "./planningTime";
 import "./App.css";
 import "maplibre-gl/dist/maplibre-gl.css";
@@ -22,66 +25,7 @@ const recentDestinations = [
   "Sunset Beach",
   "Old Town",
 ];
-
-type DestinationSearchResult = {
-  name: string;
-  label: string;
-  coordinate: {
-    latitude: number;
-    longitude: number;
-  };
-};
-
-const PLANNING_MODES = [
-  { value: "leave_now", label: "Leave now" },
-  { value: "depart_at", label: "Depart at" },
-  { value: "arrive_by", label: "Arrive by" },
-] as const;
-type PlanningMode = (typeof PLANNING_MODES)[number]["value"];
 type SearchTarget = "origin" | "destination";
-
-function RouteSummary({
-  route,
-  recommended = false,
-  label,
-}: {
-  route: RoutePlanningResponse["recommended_route"];
-  recommended?: boolean;
-  label?: string;
-}) {
-  const distance =
-    route.distance_m >= 1000
-      ? `${(route.distance_m / 1000).toFixed(1)} km`
-      : `${Math.round(route.distance_m)} m`;
-  const durationMinutes = Math.round(route.duration_s / 60);
-  const shadePercent = route.shade?.shade_coverage_percent;
-  const confidence =
-    route.coverage_confidence === "high"
-      ? "High data coverage"
-      : route.coverage_confidence === "partial"
-        ? "Partial data coverage"
-        : "Shade data unavailable";
-
-  return (
-    <article className="route-summary">
-      <div className="route-summary-heading">
-        <strong>{recommended ? "Recommended route" : label}</strong>
-        <span>{distance} · {durationMinutes} min</span>
-      </div>
-      <p>
-        {shadePercent === null || shadePercent === undefined
-          ? "Shade estimate unavailable"
-          : `Estimated shade ${Math.round(shadePercent)}%`}
-        {` · ${confidence}`}
-      </p>
-      {route.shade && route.shade.unknown_distance_m > 0 && (
-        <p className="route-summary-unknown">
-          Shade unknown for {Math.round(route.shade.unknown_distance_m)} m of this route
-        </p>
-      )}
-    </article>
-  );
-}
 
 function isDestinationSearchResult(value: unknown): value is DestinationSearchResult {
   if (!value || typeof value !== "object") return false;
@@ -448,48 +392,51 @@ function App() {
   const handleMapShortPress = useCallback(() => {
     clearDestination();
   }, [clearDestination]);
-  const handleMapLongPress = useCallback((location: maplibregl.LngLatLike) => {
-    const lngLat = maplibregl.LngLat.convert(location);
-    if (!Number.isFinite(lngLat.lng) || !Number.isFinite(lngLat.lat)) return;
+  const handleMapLongPress = useCallback(
+    (location: maplibregl.LngLatLike) => {
+      const lngLat = maplibregl.LngLat.convert(location);
+      if (!Number.isFinite(lngLat.lng) || !Number.isFinite(lngLat.lat)) return;
 
-    const destination: DestinationSearchResult = {
-      name: "Pinned destination",
-      label: `${lngLat.lat.toFixed(5)}, ${lngLat.lng.toFixed(5)}`,
-      coordinate: { latitude: lngLat.lat, longitude: lngLat.lng },
-    };
-    selectedDestinationRef.current = destination;
-    setSelectedDestination(destination);
-    setDestinationQuery(destination.name);
-    setNavigationStarted(false);
-    setRouteRequestError(null);
-    setRouteRequestState("idle");
-    setIsPickingDestinationOnMap(false);
-    setSearchOpen(false);
-    setIsClosingSearch(false);
-    setDestinationSuggestions([]);
-    setDestinationSearchState("idle");
-    setPanelExpanded(true);
-    setPanelHeight(Math.round(window.innerHeight * 0.4));
-    if (!selectedLocationRef.current) focusCurrentLocation();
+      const destination: DestinationSearchResult = {
+        name: "Pinned destination",
+        label: `${lngLat.lat.toFixed(5)}, ${lngLat.lng.toFixed(5)}`,
+        coordinate: { latitude: lngLat.lat, longitude: lngLat.lng },
+      };
+      selectedDestinationRef.current = destination;
+      setSelectedDestination(destination);
+      setDestinationQuery(destination.name);
+      setNavigationStarted(false);
+      setRouteRequestError(null);
+      setRouteRequestState("idle");
+      setIsPickingDestinationOnMap(false);
+      setSearchOpen(false);
+      setIsClosingSearch(false);
+      setDestinationSuggestions([]);
+      setDestinationSearchState("idle");
+      setPanelExpanded(true);
+      setPanelHeight(Math.round(window.innerHeight * 0.4));
+      if (!selectedLocationRef.current) focusCurrentLocation();
 
-    const map = mapRef.current;
-    if (map) {
-      destinationMarkerRef.current?.remove();
-      const markerElement = document.createElement("div");
-      markerElement.className = "destination-location-marker";
-      markerElement.setAttribute("aria-label", "Pinned destination");
-      destinationMarkerRef.current = new maplibregl.Marker({
-        element: markerElement,
-        anchor: "center",
-      })
-        .setLngLat(lngLat)
-        .addTo(map);
-      destinationMarkerRef.current.getElement().addEventListener("click", (event) => {
-        event.stopPropagation();
-        clearDestination();
-      });
-    }
-  }, [clearDestination, focusCurrentLocation]);
+      const map = mapRef.current;
+      if (map) {
+        destinationMarkerRef.current?.remove();
+        const markerElement = document.createElement("div");
+        markerElement.className = "destination-location-marker";
+        markerElement.setAttribute("aria-label", "Pinned destination");
+        destinationMarkerRef.current = new maplibregl.Marker({
+          element: markerElement,
+          anchor: "center",
+        })
+          .setLngLat(lngLat)
+          .addTo(map);
+        destinationMarkerRef.current.getElement().addEventListener("click", (event) => {
+          event.stopPropagation();
+          clearDestination();
+        });
+      }
+    },
+    [clearDestination, focusCurrentLocation],
+  );
   const reverseRoutePoints = () => {
     if (!selectedDestination || !selectedLocation) return;
 
@@ -539,7 +486,9 @@ function App() {
       searchCloseTimeoutRef.current = null;
     }
     setSearchTarget(target);
-    setDestinationQuery(target === "destination" && !selectedDestinationRef.current ? destinationQuery : "");
+    setDestinationQuery(
+      target === "destination" && !selectedDestinationRef.current ? destinationQuery : "",
+    );
     setDestinationSuggestions([]);
     setDestinationSearchState("idle");
     setIsClosingSearch(false);
@@ -838,11 +787,15 @@ function App() {
             <div className="search-row mx-auto max-w-[600px]">
               <Icon name="search" />
               <input
-                  aria-label={searchTarget === "origin" ? "Search for a starting point" : "Search for a destination"}
-                  placeholder={searchTarget === "origin" ? "Starting point" : "Where to?"}
+                aria-label={
+                  searchTarget === "origin"
+                    ? "Search for a starting point"
+                    : "Search for a destination"
+                }
+                placeholder={searchTarget === "origin" ? "Starting point" : "Where to?"}
                 value={destinationQuery}
                 onChange={(event) => handleDestinationQueryChange(event.target.value)}
-                  onFocus={() => openSearchScreen()}
+                onFocus={() => openSearchScreen()}
               />
               <button
                 className="search-arrow"
@@ -872,241 +825,66 @@ function App() {
             </div>
           )}
           {selectedDestination && (
-            <div className="route-planner">
-              <div className="route-planner-header">
-                <div>
-                  <h2>{selectedDestination.name}</h2>
-                  <p className="route-planner-label">{selectedDestination.label}</p>
-                </div>
-                <button
-                  className="route-planner-close"
-                  type="button"
-                  aria-label="Choose a different destination"
-                  onClick={(event) => {
-                    event.stopPropagation();
-                    destinationMarkerRef.current?.remove();
-                    destinationMarkerRef.current = null;
-                    setSelectedDestination(null);
-                    selectedDestinationRef.current = null;
-                    setDestinationQuery("");
-                    setPanelHeight(getSnapHeights()[1]);
-                  }}
-                >
-                  <Icon name="close" />
-                </button>
-              </div>
-              <div className="route-planner-tabs" role="tablist" aria-label="Shade preference">
-                {SHADE_PREFERENCES.map((preference) => (
-                  <button
-                    key={preference.value}
-                    className={shadePreference === preference.value ? "selected" : ""}
-                    type="button"
-                    role="tab"
-                    aria-selected={shadePreference === preference.value}
-                    onClick={(event) => {
-                      event.stopPropagation();
-                      setShadePreference(preference.value);
-                    }}
-                  >
-                    {preference.label}
-                  </button>
-                ))}
-              </div>
-              <div className="planning-mode">
-                <button
-                  ref={planningModeTriggerRef}
-                  className="planning-mode-trigger"
-                  type="button"
-                  aria-label={`Planning time: ${planningModeLabel}`}
-                  aria-haspopup="listbox"
-                  aria-expanded={planningModeMenuOpen}
-                  onClick={(event) => {
-                    event.stopPropagation();
-                    setPlanningModeMenuOpen((open) => !open);
-                  }}
-                >
-                  {planningModeLabel}
-                  <span aria-hidden="true">▾</span>
-                </button>
-                {planningModeMenuOpen && (
-                  <div
-                    ref={planningModeOptionsRef}
-                    className={`planning-mode-options ${planningModeMenuAbove ? "above" : ""}`}
-                    role="listbox"
-                    aria-label="Planning time"
-                  >
-                    {PLANNING_MODES.map((mode) => (
-                      <button
-                        key={mode.value}
-                        className={planningMode === mode.value ? "selected" : ""}
-                        type="button"
-                        role="option"
-                        aria-selected={planningMode === mode.value}
-                        onClick={(event) => {
-                          event.stopPropagation();
-                          setPlanningMode(mode.value);
-                          setRouteRequestError(null);
-                          setRouteRequestState("idle");
-                          setPlanningModeMenuOpen(false);
-                        }}
-                      >
-                        {mode.value === "leave_now" ? "Leave now" : mode.label}
-                      </button>
-                    ))}
-                  </div>
-                )}
-                {planningMode === "depart_at" && (
-                  <label className="departure-time-field">
-                    <input
-                      aria-label="Departure date and time"
-                      type="datetime-local"
-                      required
-                      min={minimumPlanningDateTime}
-                      value={departureDateTime}
-                      onChange={(event) => {
-                        setDepartureDateTime(event.target.value);
-                        setRouteRequestError(null);
-                        if (routeRequestState === "error") setRouteRequestState("idle");
-                      }}
-                    />
-                  </label>
-                )}
-                {planningMode === "arrive_by" && (
-                  <label className="departure-time-field">
-                    <input
-                      aria-label="Arrival date and time"
-                      type="datetime-local"
-                      required
-                      min={minimumPlanningDateTime}
-                      value={arrivalDateTime}
-                      onChange={(event) => {
-                        setArrivalDateTime(event.target.value);
-                        setRouteRequestError(null);
-                        if (routeRequestState === "error") setRouteRequestState("idle");
-                      }}
-                    />
-                  </label>
-                )}
-              </div>
-              <button
-                className="start-navigation"
-                type="button"
-                disabled={routeRequestState === "loading"}
-                onClick={(event) => {
-                  event.stopPropagation();
-                  void startNavigation();
-                }}
-              >
-                {routeRequestState === "loading"
-                  ? "Planning route..."
-                  : navigationStarted
-                    ? "Navigation started"
-                    : "Start navigation"}
-              </button>
-              {routeRequestError && (
-                <p className="location-error" role="alert">
-                  {routeRequestError}
-                </p>
-              )}
-              {plannedRoutes && (
-                <section className="planned-routes" aria-label="Planned routes" aria-live="polite">
-                  <RouteSummary route={plannedRoutes.recommended_route} recommended />
-                  {plannedRoutes.alternatives.map((route, index) => (
-                    <RouteSummary key={route.id} route={route} label={`Alternative ${index + 1}`} />
-                  ))}
-                </section>
-              )}
-            </div>
+            <RoutePlannerPanel
+              destination={selectedDestination}
+              shadePreference={shadePreference}
+              onShadePreferenceChange={setShadePreference}
+              planningMode={planningMode}
+              onPlanningModeChange={setPlanningMode}
+              planningModeLabel={planningModeLabel}
+              planningModeMenuOpen={planningModeMenuOpen}
+              onPlanningModeMenuOpenChange={setPlanningModeMenuOpen}
+              planningModeMenuAbove={planningModeMenuAbove}
+              planningModeTriggerRef={planningModeTriggerRef}
+              planningModeOptionsRef={planningModeOptionsRef}
+              minimumPlanningDateTime={minimumPlanningDateTime}
+              departureDateTime={departureDateTime}
+              onDepartureDateTimeChange={setDepartureDateTime}
+              arrivalDateTime={arrivalDateTime}
+              onArrivalDateTimeChange={setArrivalDateTime}
+              requestState={routeRequestState}
+              requestError={routeRequestError}
+              navigationStarted={navigationStarted}
+              routes={plannedRoutes}
+              onStartNavigation={() => void startNavigation()}
+              onCloseDestination={() => {
+                destinationMarkerRef.current?.remove();
+                destinationMarkerRef.current = null;
+                setSelectedDestination(null);
+                selectedDestinationRef.current = null;
+                setDestinationQuery("");
+                setPlannedRoutes(null);
+                setNavigationStarted(false);
+                setPanelHeight(getSnapHeights()[1]);
+              }}
+              onPlanningInputChange={() => {
+                setPlannedRoutes(null);
+                setNavigationStarted(false);
+                setRouteRequestError(null);
+                if (routeRequestState === "error") setRouteRequestState("idle");
+              }}
+            />
           )}
         </div>
-        {searchOpen && (
-          <div className={`search-screen ${isClosingSearch ? "closing" : ""}`}>
-            <div className="search-screen-header">
-              <div className="search-row">
-                <button
-                  className="search-back"
-                  type="button"
-                  aria-label="Close search"
-                  onClick={closeSearchScreen}
-                >
-                  <Icon name="back" />
-                </button>
-                <input
-                  autoFocus
-                  aria-label={searchTarget === "origin" ? "Search for a starting point" : "Search for a destination"}
-                  placeholder={searchTarget === "origin" ? "Search for a starting point" : "Where to?"}
-                  value={destinationQuery}
-                  onChange={(event) => handleDestinationQueryChange(event.target.value)}
-                />
-              </div>
-              {searchTarget === "destination" && (
-                <button
-                  className="choose-on-map"
-                  type="button"
-                  onClick={() => {
-                    setIsPickingDestinationOnMap(true);
-                    setDestinationSearchState("idle");
-                    setDestinationSuggestions([]);
-                    setIsClosingSearch(false);
-                    setSearchOpen(false);
-                  }}
-                >
-                  <Icon name="crosshair" />
-                  Choose on map
-                </button>
-              )}
-            </div>
-            <div className="recent-destinations">
-              {destinationSearchState === "loading" && (
-                <p role="status">Searching locations...</p>
-              )}
-              {destinationSearchState === "error" && (
-                <p className="location-error" role="alert">
-                  Location search is unavailable. Try again.
-                </p>
-              )}
-              {destinationSearchState === "idle" &&
-                destinationQuery.trim().length >= 2 &&
-                destinationSuggestions.length === 0 &&
-                <p>
-                  No matching {searchTarget === "origin" ? "starting points" : "destinations"} found.
-                </p>}
-              {destinationSuggestions.length > 0 && (
-                <>
-                  <p>{searchTarget === "origin" ? "Matching starting points" : "Matching destinations"}</p>
-                  {destinationSuggestions.map((destination) => (
-                    <button
-                      type="button"
-                      key={`${destination.name}-${destination.coordinate.latitude}-${destination.coordinate.longitude}`}
-                      onClick={() => handleDestinationSelect(destination)}
-                    >
-                      <span className="recent-icon">
-                        <Icon name="arrow" />
-                      </span>
-                      <span>
-                        <strong className="destination-name">{destination.name}</strong>
-                        <small className="destination-label">{destination.label}</small>
-                      </span>
-                    </button>
-                  ))}
-                </>
-              )}
-              {destinationQuery.trim().length < 2 && searchTarget === "destination" && (
-                <>
-                  <p>Recent destinations</p>
-                  {recentDestinations.map((destination) => (
-                    <button type="button" key={destination}>
-                      <span className="recent-icon">
-                        <Icon name="arrow" />
-                      </span>
-                      {destination}
-                    </button>
-                  ))}
-                </>
-              )}
-            </div>
-          </div>
-        )}
+        <LocationSearchOverlay
+          isOpen={searchOpen}
+          isClosing={isClosingSearch}
+          target={searchTarget}
+          query={destinationQuery}
+          searchState={destinationSearchState}
+          suggestions={destinationSuggestions}
+          recentDestinations={recentDestinations}
+          onClose={closeSearchScreen}
+          onQueryChange={handleDestinationQueryChange}
+          onChooseOnMap={() => {
+            setIsPickingDestinationOnMap(true);
+            setDestinationSearchState("idle");
+            setDestinationSuggestions([]);
+            setIsClosingSearch(false);
+            setSearchOpen(false);
+          }}
+          onSelect={handleDestinationSelect}
+        />
       </section>
     </main>
   );

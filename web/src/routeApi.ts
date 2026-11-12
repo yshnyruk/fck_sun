@@ -71,7 +71,8 @@ function parseRoute(value: unknown): PlannedRoute | null {
     value.distance_m <= 0 ||
     !isFiniteNumber(value.duration_s) ||
     value.duration_s <= 0 ||
-    (value.score !== null && (!isFiniteNumber(value.score) || value.score < 0 || value.score > 1)) ||
+    (value.score !== null &&
+      (!isFiniteNumber(value.score) || value.score < 0 || value.score > 1)) ||
     !isCoverageConfidence(value.coverage_confidence)
   ) {
     return null;
