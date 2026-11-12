@@ -2,6 +2,7 @@ import * as maplibregl from "maplibre-gl";
 import { useEffect, useRef } from "react";
 import { BASE_MAP_STYLE, INITIAL_MAP_VIEW, INITIAL_MAP_ZOOM, MAP_STYLES } from "../map/mapConfig";
 import type { MapStyleName } from "../map/mapConfig";
+import type { PlannedRoute } from "../routeApi";
 
 type MapViewProps = {
   mapRef: React.RefObject<maplibregl.Map | null>;
@@ -10,6 +11,7 @@ type MapViewProps = {
   onMapDragStart: () => void;
   onMapReady: () => void;
   mapStyle: MapStyleName;
+  route: PlannedRoute | null;
 };
 
 export function MapView({
@@ -19,6 +21,7 @@ export function MapView({
   onMapDragStart,
   onMapReady,
   mapStyle,
+  route,
 }: MapViewProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const longPressTimerRef = useRef<ReturnType<typeof window.setTimeout> | null>(null);
@@ -105,6 +108,40 @@ export function MapView({
       mapRef.current.setStyle(MAP_STYLES[mapStyle]);
     }
   }, [mapRef, mapStyle]);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+
+    const renderRoute = () => {
+      if (map.getLayer("planned-route-line")) map.removeLayer("planned-route-line");
+      if (map.getSource("planned-route")) map.removeSource("planned-route");
+      if (!route) return;
+      map.addSource("planned-route", {
+        type: "geojson",
+        data: { type: "Feature", properties: {}, geometry: route.geometry },
+      });
+      map.addLayer({
+        id: "planned-route-line",
+        type: "line",
+        source: "planned-route",
+        layout: { "line-cap": "round", "line-join": "round" },
+        paint: { "line-color": "#1876c9", "line-width": 6, "line-opacity": 0.92 },
+      });
+      const coordinates = route.geometry.coordinates;
+      const bounds = coordinates.reduce(
+        (result, coordinate) => result.extend(coordinate),
+        new maplibregl.LngLatBounds(coordinates[0], coordinates[0]),
+      );
+      map.fitBounds(bounds, { padding: 72, maxZoom: 16, duration: 450 });
+    };
+
+    if (map.isStyleLoaded()) renderRoute();
+    map.on("style.load", renderRoute);
+    return () => {
+      map.off("style.load", renderRoute);
+    };
+  }, [mapRef, route, mapStyle]);
 
   return <div ref={containerRef} className="maplibre-map" aria-label="Interactive map" />;
 }

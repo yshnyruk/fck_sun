@@ -30,6 +30,23 @@ vi.mock("./components/MapView", () => ({
 }));
 
 const geolocationDescriptor = Object.getOwnPropertyDescriptor(navigator, "geolocation");
+const routeResponse = {
+  recommended_route: {
+    id: "route-1",
+    geometry: { type: "LineString", coordinates: [[-73.98, 40.75], [-73.97, 40.78]] },
+    distance_m: 1200,
+    duration_s: 900,
+    score: 0.8,
+    shade: {
+      shade_coverage_percent: 65,
+      classified_distance_m: 1000,
+      unknown_distance_m: 200,
+      segments: [],
+    },
+    coverage_confidence: "partial",
+  },
+  alternatives: [],
+};
 
 beforeEach(() => {
   Object.defineProperty(navigator, "geolocation", {
@@ -111,7 +128,7 @@ describe("FckSun frontend", () => {
 
   it("submits selected route inputs and displays loading while the request is pending", async () => {
     let finishRouteRequest: ((response: Response) => void) | undefined;
-    const fetchMock = vi.fn((input: RequestInfo | URL) => {
+    const fetchMock = vi.fn((input: RequestInfo | URL, _init?: RequestInit) => {
       const url = String(input);
       if (url.includes("/search?")) {
         return Promise.resolve({
@@ -167,15 +184,19 @@ describe("FckSun frontend", () => {
 
     finishRouteRequest?.({
       ok: true,
-      json: async () => ({ recommended_route: {}, alternatives: [] }),
+      json: async () => routeResponse,
     } as Response);
     expect((await screen.findByRole("button", { name: "Navigation started" })).textContent).toBe(
       "Navigation started",
     );
+    expect(screen.getByText("Recommended route")).toBeDefined();
+    expect(screen.getByText(/1.2 km · 15 min/)).toBeDefined();
+    expect(screen.getByText(/Estimated shade 65% · Partial data coverage/)).toBeDefined();
+    expect(screen.getByText("Shade unknown for 200 m of this route")).toBeDefined();
   });
 
   it("reverses the displayed points and submits their reversed coordinates", async () => {
-    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, _init?: RequestInit) => {
       if (String(input).includes("/search?")) {
         return {
           ok: true,
@@ -192,7 +213,7 @@ describe("FckSun frontend", () => {
       }
       return {
         ok: true,
-        json: async () => ({ recommended_route: {}, alternatives: [] }),
+        json: async () => routeResponse,
       } as Response;
     });
     vi.stubGlobal("fetch", fetchMock);
@@ -238,7 +259,7 @@ describe("FckSun frontend", () => {
       configurable: true,
       value: { getCurrentPosition },
     });
-    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, _init?: RequestInit) => {
       if (String(input).includes("/search?")) {
         return {
           ok: true,
@@ -255,7 +276,7 @@ describe("FckSun frontend", () => {
       }
       return {
         ok: true,
-        json: async () => ({ recommended_route: {}, alternatives: [] }),
+        json: async () => routeResponse,
       } as Response;
     });
     vi.stubGlobal("fetch", fetchMock);
@@ -279,7 +300,7 @@ describe("FckSun frontend", () => {
   });
 
   it("opens the matching location search when either route point is tapped", async () => {
-    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, _init?: RequestInit) => {
       const url = new URL(String(input), "http://localhost");
       if (url.pathname.endsWith("/search")) {
         const query = url.searchParams.get("q");
@@ -304,7 +325,7 @@ describe("FckSun frontend", () => {
       }
       return {
         ok: true,
-        json: async () => ({ recommended_route: {}, alternatives: [] }),
+        json: async () => routeResponse,
       } as Response;
     });
     vi.stubGlobal("fetch", fetchMock);
@@ -360,7 +381,7 @@ describe("FckSun frontend", () => {
         },
       },
     });
-    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, _init?: RequestInit) => {
       if (String(input).includes("/search?")) {
         return {
           ok: true,
@@ -377,7 +398,7 @@ describe("FckSun frontend", () => {
       }
       return {
         ok: true,
-        json: async () => ({ recommended_route: {}, alternatives: [] }),
+        json: async () => routeResponse,
       } as Response;
     });
     vi.stubGlobal("fetch", fetchMock);
@@ -393,7 +414,7 @@ describe("FckSun frontend", () => {
   });
 
   it("rejects a past scheduled departure before sending a route request", async () => {
-    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, _init?: RequestInit) => {
       if (String(input).includes("/search?")) {
         return {
           ok: true,
@@ -410,7 +431,7 @@ describe("FckSun frontend", () => {
       }
       return {
         ok: true,
-        json: async () => ({ recommended_route: {}, alternatives: [] }),
+        json: async () => routeResponse,
       } as Response;
     });
     vi.stubGlobal("fetch", fetchMock);

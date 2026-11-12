@@ -3,6 +3,7 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react
 import { Icon } from "./components/Icon";
 import { MapView } from "./components/MapView";
 import { config } from "./config";
+import { parseRoutePlanningResponse, type RoutePlanningResponse } from "./routeApi";
 import type { MapStyleName } from "./map/mapConfig";
 import { SHADE_PREFERENCES, type ShadePreference } from "./shadePreferences";
 import { toLocalDateTimeInput, toUtcISOString } from "./planningTime";
@@ -38,6 +39,49 @@ const PLANNING_MODES = [
 ] as const;
 type PlanningMode = (typeof PLANNING_MODES)[number]["value"];
 type SearchTarget = "origin" | "destination";
+
+function RouteSummary({
+  route,
+  recommended = false,
+  label,
+}: {
+  route: RoutePlanningResponse["recommended_route"];
+  recommended?: boolean;
+  label?: string;
+}) {
+  const distance =
+    route.distance_m >= 1000
+      ? `${(route.distance_m / 1000).toFixed(1)} km`
+      : `${Math.round(route.distance_m)} m`;
+  const durationMinutes = Math.round(route.duration_s / 60);
+  const shadePercent = route.shade?.shade_coverage_percent;
+  const confidence =
+    route.coverage_confidence === "high"
+      ? "High data coverage"
+      : route.coverage_confidence === "partial"
+        ? "Partial data coverage"
+        : "Shade data unavailable";
+
+  return (
+    <article className="route-summary">
+      <div className="route-summary-heading">
+        <strong>{recommended ? "Recommended route" : label}</strong>
+        <span>{distance} · {durationMinutes} min</span>
+      </div>
+      <p>
+        {shadePercent === null || shadePercent === undefined
+          ? "Shade estimate unavailable"
+          : `Estimated shade ${Math.round(shadePercent)}%`}
+        {` · ${confidence}`}
+      </p>
+      {route.shade && route.shade.unknown_distance_m > 0 && (
+        <p className="route-summary-unknown">
+          Shade unknown for {Math.round(route.shade.unknown_distance_m)} m of this route
+        </p>
+      )}
+    </article>
+  );
+}
 
 function isDestinationSearchResult(value: unknown): value is DestinationSearchResult {
   if (!value || typeof value !== "object") return false;
@@ -80,6 +124,7 @@ function App() {
   const [navigationStarted, setNavigationStarted] = useState(false);
   const [routeRequestState, setRouteRequestState] = useState<"idle" | "loading" | "error">("idle");
   const [routeRequestError, setRouteRequestError] = useState<string | null>(null);
+  const [plannedRoutes, setPlannedRoutes] = useState<RoutePlanningResponse | null>(null);
   const [mapStyle, setMapStyle] = useState<MapStyleName>("default");
   const [mapStyleOpen, setMapStyleOpen] = useState(false);
   const [destinationQuery, setDestinationQuery] = useState("");
@@ -334,6 +379,7 @@ function App() {
 
     setRouteRequestState("loading");
     setRouteRequestError(null);
+    setPlannedRoutes(null);
     try {
       const response = await fetch(`${config.apiBaseUrl}/routes`, {
         method: "POST",
@@ -356,7 +402,9 @@ function App() {
       if (!response.ok) {
         throw new Error(`Route planning failed with status ${response.status}`);
       }
-      await response.json();
+      const result = parseRoutePlanningResponse(await response.json());
+      if (!result) throw new Error("Route planning returned an invalid response");
+      setPlannedRoutes(result);
       setRouteRequestState("idle");
       setNavigationStarted(true);
     } catch (error) {
@@ -597,6 +645,7 @@ function App() {
           onMapDragStart={resetExpandedMapControls}
           onMapReady={focusCurrentLocation}
           mapStyle={mapStyle}
+          route={plannedRoutes?.recommended_route ?? null}
         />
         {selectedDestination && (
           <section className="route-points-card" aria-label="Route locations">
@@ -958,6 +1007,14 @@ function App() {
                 <p className="location-error" role="alert">
                   {routeRequestError}
                 </p>
+              )}
+              {plannedRoutes && (
+                <section className="planned-routes" aria-label="Planned routes" aria-live="polite">
+                  <RouteSummary route={plannedRoutes.recommended_route} recommended />
+                  {plannedRoutes.alternatives.map((route, index) => (
+                    <RouteSummary key={route.id} route={route} label={`Alternative ${index + 1}`} />
+                  ))}
+                </section>
               )}
             </div>
           )}

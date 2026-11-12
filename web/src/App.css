@@ -1081,6 +1081,41 @@
   opacity: 0.65;
 }
 
+.planned-routes {
+  display: grid;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.route-summary {
+  padding: 11px 12px;
+  border: 1px solid #dce9f3;
+  border-radius: 11px;
+  background: #f7fbfe;
+}
+
+.route-summary-heading {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  color: #244665;
+  font-size: 12px;
+}
+
+.route-summary-heading span {
+  white-space: nowrap;
+}
+
+.route-summary p {
+  margin: 5px 0 0;
+  color: #5f7c96;
+  font-size: 11px;
+}
+
+.route-summary .route-summary-unknown {
+  color: #926526;
+}
+
 .recent-destinations p {
   margin: 0 0 7px 4px;
   color: #7691aa;
