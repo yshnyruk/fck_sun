@@ -15,7 +15,9 @@ const MAP_STYLES = {
     sources: {
       satellite: {
         type: "raster",
-        tiles: ["https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"],
+        tiles: [
+          "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
+        ],
         tileSize: 256,
         attribution: "© Esri",
       },
@@ -413,20 +415,20 @@ function App() {
         <div className="map-style-control absolute right-4 top-4 z-[7] sm:right-6">
           <div className={`map-style-switcher ${mapStyleOpen ? "open" : ""}`}>
             <div className="map-style-options" role="group" aria-label="Map style">
-                {(["default", "satellite", "terrain"] as const).map((styleName) => (
-                  <button
-                    key={styleName}
-                    className={mapStyle === styleName ? "selected" : ""}
-                    type="button"
-                    aria-pressed={mapStyle === styleName}
-                    onClick={() => {
-                      setMapStyle(styleName);
-                      setMapStyleOpen(false);
-                    }}
-                  >
-                    {styleName}
-                  </button>
-                ))}
+              {(["default", "satellite", "terrain"] as const).map((styleName) => (
+                <button
+                  key={styleName}
+                  className={mapStyle === styleName ? "selected" : ""}
+                  type="button"
+                  aria-pressed={mapStyle === styleName}
+                  onClick={() => {
+                    setMapStyle(styleName);
+                    setMapStyleOpen(false);
+                  }}
+                >
+                  {styleName}
+                </button>
+              ))}
             </div>
             <button
               className="map-style-toggle"
