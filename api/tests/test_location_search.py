@@ -13,6 +13,8 @@ from api.integrations.graphhopper_geocoding import (
     GraphHopperGeocodingResponseError,
 )
 from api.main import app
+from api.schemas.routes import Coordinate
+from api.schemas.search import LocationSearchResult
 from api.services.location_search import LocationSearchService
 
 
@@ -102,15 +104,46 @@ async def test_location_search_propagates_provider_errors() -> None:
 
 def test_search_endpoint_returns_results() -> None:
     class StubService:
-        async def search(self, _: str, *, limit: int = 5) -> list[Any]:
-            assert limit == 5
+        async def search(self, query: str, *, limit: int = 5) -> list[LocationSearchResult]:
+            assert query == "Central Park"
+            assert limit == 3
             return [
-                {
-                    "name": "Central Park",
-                    "label": "New York, United States",
-                    "coordinate": {"latitude": 40.7829, "longitude": -73.9654},
-                }
+                LocationSearchResult(
+                    name="Central Park",
+                    label="New York, United States",
+                    coordinate=Coordinate(latitude=40.7829, longitude=-73.9654),
+                )
             ]
+
+    app.dependency_overrides[get_location_search_service] = lambda: StubService()
+    try:
+        response = TestClient(app).get("/api/v1/search?q=Central%20Park&limit=3")
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "results": [
+            {
+                "name": "Central Park",
+                "label": "New York, United States",
+                "coordinate": {"latitude": 40.7829, "longitude": -73.9654},
+            }
+        ]
+    }
+
+
+def test_search_endpoint_returns_structured_provider_error() -> None:
+    async def failing_search(
+        self: object,
+        _: str,
+        *,
+        limit: int = 5,
+    ) -> list[LocationSearchResult]:
+        raise GraphHopperGeocodingRequestError("provider unavailable")
+
+    class StubService:
+        search = failing_search
 
     app.dependency_overrides[get_location_search_service] = lambda: StubService()
     try:
@@ -118,12 +151,25 @@ def test_search_endpoint_returns_results() -> None:
     finally:
         app.dependency_overrides.clear()
 
-    assert response.status_code == 200
-    assert response.json()["results"][0]["name"] == "Central Park"
+    assert response.status_code == 502
+    assert response.json() == {
+        "error": {
+            "code": "BAD_GATEWAY",
+            "message": "Location search provider is unavailable.",
+            "details": None,
+        }
+    }
 
 
 def test_search_endpoint_validates_query_length() -> None:
     response = TestClient(app).get("/api/v1/search?q=x")
+
+    assert response.status_code == 422
+    assert response.json()["error"]["code"] == "VALIDATION_ERROR"
+
+
+def test_search_endpoint_rejects_blank_query() -> None:
+    response = TestClient(app).get("/api/v1/search?q=%20%20")
 
     assert response.status_code == 422
     assert response.json()["error"]["code"] == "VALIDATION_ERROR"
