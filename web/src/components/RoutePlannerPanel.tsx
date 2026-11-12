@@ -94,9 +94,7 @@ function RouteSummary({
             : `${Math.round(shadePercent)}%`}
         </strong>
       </p>
-      <p className="route-summary-confidence">
-        Shade data coverage: {confidence}
-      </p>
+      <p className="route-summary-confidence">Shade data coverage: {confidence}</p>
       <p className="route-summary-confidence-note">{confidenceNote}</p>
       {route.shade && route.shade.unknown_distance_m > 0 && (
         <p className="route-summary-unknown">
@@ -134,6 +132,16 @@ export function RoutePlannerPanel({
   onCloseDestination,
   onPlanningInputChange,
 }: RoutePlannerPanelProps) {
+  const availableRoutes = routes ? [routes.recommended_route, ...routes.alternatives] : [];
+  const selectedRoute = availableRoutes.find((route) => route.id === selectedRouteId);
+  const selectedAlternativeIndex =
+    routes?.alternatives.findIndex((route) => route.id === selectedRoute?.id) ?? -1;
+  const selectedRouteLabel = selectedRoute
+    ? selectedAlternativeIndex < 0
+      ? "Recommended route"
+      : `Alternative ${selectedAlternativeIndex + 1}`
+    : null;
+
   return (
     <div className="route-planner">
       <div className="route-planner-header">
@@ -263,6 +271,60 @@ export function RoutePlannerPanel({
       )}
       {routes && (
         <section className="planned-routes" aria-label="Available routes" aria-live="polite">
+          {selectedRoute && (
+            <section
+              className="selected-route-details"
+              aria-label="Selected route details"
+              aria-live="polite"
+            >
+              <h3>{selectedRouteLabel} details</h3>
+              <dl>
+                <div>
+                  <dt>Distance</dt>
+                  <dd>
+                    {selectedRoute.distance_m >= 1000
+                      ? `${(selectedRoute.distance_m / 1000).toFixed(1)} km`
+                      : `${Math.round(selectedRoute.distance_m)} m`}
+                  </dd>
+                </div>
+                <div>
+                  <dt>Estimated walking time</dt>
+                  <dd>{Math.round(selectedRoute.duration_s / 60)} min</dd>
+                </div>
+                <div>
+                  <dt>Overall shade coverage</dt>
+                  <dd>
+                    {selectedRoute.shade?.shade_coverage_percent == null
+                      ? "Unavailable"
+                      : `${Math.round(selectedRoute.shade.shade_coverage_percent)}%`}
+                  </dd>
+                </div>
+                <div>
+                  <dt>Shade data coverage</dt>
+                  <dd>
+                    {selectedRoute.coverage_confidence === "high"
+                      ? "High"
+                      : selectedRoute.coverage_confidence === "partial"
+                        ? "Partial"
+                        : "Insufficient"}
+                  </dd>
+                </div>
+              </dl>
+              <p>
+                {selectedRoute.coverage_confidence === "high"
+                  ? "Shade estimates cover most of this route."
+                  : selectedRoute.coverage_confidence === "partial"
+                    ? "Some segments have unknown shade and are not counted as exposed."
+                    : "Shade data is too limited for reliable shade guidance on this route."}
+              </p>
+              {selectedRoute.shade && selectedRoute.shade.unknown_distance_m > 0 && (
+                <p className="selected-route-unknown">
+                  Shade unknown for {Math.round(selectedRoute.shade.unknown_distance_m)} m of this
+                  route
+                </p>
+              )}
+            </section>
+          )}
           <RouteSummary
             route={routes.recommended_route}
             recommended
@@ -279,9 +341,18 @@ export function RoutePlannerPanel({
             />
           ))}
           <div className="route-shade-legend" aria-label="Route segment shade legend">
-            <span><i className="shaded" aria-hidden="true" />Shaded</span>
-            <span><i className="exposed" aria-hidden="true" />Exposed</span>
-            <span><i className="unknown" aria-hidden="true" />Unknown</span>
+            <span>
+              <i className="shaded" aria-hidden="true" />
+              Shaded
+            </span>
+            <span>
+              <i className="exposed" aria-hidden="true" />
+              Exposed
+            </span>
+            <span>
+              <i className="unknown" aria-hidden="true" />
+              Unknown
+            </span>
           </div>
         </section>
       )}

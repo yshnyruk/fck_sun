@@ -57,9 +57,7 @@ export function buildRouteShadeFeatures(route: PlannedRoute): RouteShadeLineFeat
     features.push(createFeature(route.id, "unknown", clipGeometry(cursor, geometryDistance)));
   }
 
-  return features.length > 0
-    ? features
-    : [createFeature(route.id, "unknown", coordinates)];
+  return features.length > 0 ? features : [createFeature(route.id, "unknown", coordinates)];
 
   function clipGeometry(startDistance: number, endDistance: number): [number, number][] {
     const clipped: [number, number][] = [pointAtDistance(startDistance)];
