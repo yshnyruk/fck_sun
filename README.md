@@ -77,6 +77,18 @@ distance is split between shaded and exposed totals. A route with no classified
 distance is marked `insufficient`; any unknown distance or non-high segment
 confidence makes the overall result `partial`.
 
+The default configurable thresholds are:
+
+- `high_minimum_usable_ratio = 0.80`: at least 80% of route distance must have
+  usable data, and all contributing provider confidence must be high.
+- `insufficient_below_usable_ratio = 0.20`: below 20% usable distance is
+  insufficient for shade-based recommendations.
+- Values between those thresholds are partial coverage.
+
+These defaults make the confidence decision conservative: unknown distance is
+never classified as exposure, and an insufficient shade result does not remove
+the standard pedestrian route.
+
 ## Development
 
 Install the backend dependencies in a virtual environment and the frontend

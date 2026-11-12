@@ -2,8 +2,8 @@
 
 from collections.abc import Mapping
 
-from api.schemas.route_coverage import RouteShadeCoverage
-from api.schemas.routes import CoverageConfidence, ShadeClassification
+from api.schemas.route_coverage import RouteShadeCoverage, ShadeCoverageThresholds
+from api.schemas.routes import CoverageConfidence, Route, ShadeClassification, ShadeEstimate
 from api.schemas.segment_shadows import SegmentShadow
 from api.schemas.segments import RouteSegment
 
@@ -17,6 +17,7 @@ class RouteShadeCoverageError(Exception):
 def calculate_route_shade_coverage(
     segments: list[RouteSegment],
     shadows: list[SegmentShadow],
+    thresholds: ShadeCoverageThresholds | None = None,
 ) -> RouteShadeCoverage:
     """Return a distance-weighted summary without treating unknown as exposure."""
     if not segments:
@@ -46,6 +47,8 @@ def calculate_route_shade_coverage(
     if total_distance <= 0:
         raise RouteShadeCoverageError("Route segment distances must be positive")
 
+    settings = thresholds or ShadeCoverageThresholds()
+    usable_percentage = (shaded_distance + exposed_distance) / total_distance * 100
     return RouteShadeCoverage(
         total_distance_m=total_distance,
         shaded_distance_m=shaded_distance,
@@ -54,11 +57,27 @@ def calculate_route_shade_coverage(
         shaded_percentage=shaded_distance / total_distance * 100,
         exposed_percentage=exposed_distance / total_distance * 100,
         unknown_percentage=unknown_distance / total_distance * 100,
+        usable_percentage=usable_percentage,
         coverage_confidence=_overall_confidence(
             shaded_distance + exposed_distance,
             unknown_distance,
             confidences,
+            settings,
         ),
+    )
+
+
+def attach_route_shade_coverage(route: Route, coverage: RouteShadeCoverage) -> Route:
+    """Attach normalized coverage metadata while preserving the pedestrian route."""
+    return route.model_copy(
+        update={
+            "coverage_confidence": coverage.coverage_confidence,
+            "shade": ShadeEstimate(
+                shade_coverage_percent=coverage.shaded_percentage,
+                classified_distance_m=(coverage.shaded_distance_m + coverage.exposed_distance_m),
+                unknown_distance_m=coverage.unknown_distance_m,
+            ),
+        }
     )
 
 
@@ -94,10 +113,13 @@ def _overall_confidence(
     classified_distance_m: float,
     unknown_distance_m: float,
     confidences: list[CoverageConfidence],
+    thresholds: ShadeCoverageThresholds,
 ) -> CoverageConfidence:
-    if classified_distance_m <= _DISTANCE_TOLERANCE_M:
+    total_distance_m = classified_distance_m + unknown_distance_m
+    usable_ratio = classified_distance_m / total_distance_m if total_distance_m else 0
+    if usable_ratio < thresholds.insufficient_below_usable_ratio:
         return CoverageConfidence.INSUFFICIENT
-    if unknown_distance_m > _DISTANCE_TOLERANCE_M or any(
+    if usable_ratio < thresholds.high_minimum_usable_ratio or any(
         confidence is not CoverageConfidence.HIGH for confidence in confidences
     ):
         return CoverageConfidence.PARTIAL
