@@ -14,6 +14,10 @@ from api.integrations.shademap import (
 )
 from api.schemas.routes import CoverageConfidence
 from api.schemas.shadows import ShadowRequest, ShadowViewport
+from api.services.shadow_processing import (
+    ShadowResponseProcessingError,
+    process_shademap_response,
+)
 
 
 def shadow_request() -> ShadowRequest:
@@ -75,6 +79,66 @@ async def test_adapter_normalizes_shademap_shadow_information(
     assert response.coverage_confidence is CoverageConfidence.PARTIAL
     assert response.samples[0].location.latitude == 40.7
     assert response.samples[1].unknown_reason == "vegetation data unavailable"
+    assert response.samples[0].source == "shademap"
+    assert response.samples[1].data_available is False
+
+
+def test_processor_normalizes_geojson_coordinates_and_optional_percentage() -> None:
+    response = process_shademap_response(
+        {
+            "coverage_confidence": "high",
+            "features": [
+                {
+                    "type": "Feature",
+                    "geometry": {"type": "Point", "coordinates": [-74.0, 40.7]},
+                    "properties": {
+                        "shade": "shade",
+                        "evaluated_time": "2026-06-01T12:00:00+00:00",
+                        "shade_percentage": 80,
+                    },
+                }
+            ],
+        },
+        shadow_request(),
+    )
+
+    sample = response.samples[0]
+    assert sample.location.latitude == 40.7
+    assert sample.location.longitude == -74.0
+    assert sample.evaluated_time == datetime(2026, 6, 1, 12, 0, tzinfo=UTC)
+    assert sample.shade_percentage == 80
+    assert sample.data_available is True
+
+
+def test_processor_preserves_unknown_for_missing_or_invalid_values() -> None:
+    response = process_shademap_response(
+        {
+            "coverage_confidence": "partial",
+            "samples": [
+                {
+                    "location": {"latitude": 40.7, "longitude": -74.0},
+                    "timestamp": "not-a-timestamp",
+                },
+                {
+                    "location": {"latitude": 40.71, "longitude": -74.01},
+                    "classification": "unrecognized-provider-value",
+                },
+            ],
+        },
+        shadow_request(),
+    )
+
+    assert all(sample.classification.value == "unknown" for sample in response.samples)
+    assert all(sample.data_available is False for sample in response.samples)
+    assert response.samples[0].unknown_reason == "ShadeMap returned an invalid or missing timestamp"
+
+
+def test_processor_rejects_invalid_response_with_controlled_error() -> None:
+    with pytest.raises(ShadowResponseProcessingError, match="samples must be a list"):
+        process_shademap_response(
+            {"coverage_confidence": "high", "samples": {}},
+            shadow_request(),
+        )
 
 
 @pytest.mark.anyio

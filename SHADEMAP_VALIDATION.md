@@ -34,6 +34,13 @@ These are adapter-contract tests, not live ShadeMap capability tests. They prove
 the application boundary is time- and viewport-aware, but cannot prove that
 `https://shademap.app/api/v1/shadows` is a supported public endpoint.
 
+The normalized FckSun sample structure contains geographic coordinates, the evaluated
+UTC timestamp, a controlled shade classification (`confirmed_shade`,
+`confirmed_exposure`, or `unknown`), `data_available`, the source identifier, and an
+optional percentage only when the provider supplies a valid 0-100 value. Invalid or
+missing classifications and timestamps remain unknown; they are never converted into
+confirmed exposure.
+
 ## MVP decision
 
 ShadeMap is **not yet sufficient as a verified backend provider for the MVP**.

@@ -1,4 +1,5 @@
 from datetime import UTC, datetime
+from typing import Literal
 
 from pydantic import BaseModel, Field, model_validator
 
@@ -37,6 +38,9 @@ class ShadowSample(BaseModel):
     location: Coordinate
     classification: ShadeClassification
     evaluated_time: datetime
+    source: Literal["shademap"] = "shademap"
+    shade_percentage: float | None = Field(default=None, ge=0, le=100)
+    data_available: bool | None = None
     unknown_reason: str | None = Field(default=None, min_length=1)
 
     @model_validator(mode="after")
@@ -47,6 +51,12 @@ class ShadowSample(BaseModel):
             raise ValueError("evaluated_time must be expressed in UTC")
         if self.classification is ShadeClassification.UNKNOWN and self.unknown_reason is None:
             raise ValueError("unknown_reason is required for unknown shadow samples")
+        if self.data_available is None:
+            self.data_available = self.classification is not ShadeClassification.UNKNOWN
+        if self.data_available != (self.classification is not ShadeClassification.UNKNOWN):
+            raise ValueError("data_available must match the shadow classification")
+        if self.classification is ShadeClassification.UNKNOWN and self.shade_percentage is not None:
+            raise ValueError("shade_percentage is only allowed for classified samples")
         if (
             self.classification is not ShadeClassification.UNKNOWN
             and self.unknown_reason is not None

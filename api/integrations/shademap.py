@@ -1,13 +1,15 @@
 """ShadeMap adapter for time-specific geographic shadow information."""
 
-from collections.abc import Mapping
 from typing import Any
 
 import httpx
-from pydantic import ValidationError
 
 from api.core.config import Settings
 from api.schemas.shadows import ShadowRequest, ShadowResponse
+from api.services.shadow_processing import (
+    ShadowResponseProcessingError,
+    process_shademap_response,
+)
 
 
 class ShadeMapError(Exception):
@@ -65,14 +67,14 @@ class ShadeMapAdapter:
         except ValueError as error:
             raise ShadeMapResponseError("ShadeMap returned invalid JSON") from error
 
-        if not isinstance(payload, Mapping):
+        if not isinstance(payload, dict):
             raise ShadeMapResponseError("ShadeMap returned an invalid response object")
         if response.is_error:
             raise ShadeMapRequestError(self._error_message(response.status_code, payload))
 
         try:
-            return self._to_shadow_response(payload, request)
-        except ValidationError as error:
+            return process_shademap_response(payload, request)
+        except ShadowResponseProcessingError as error:
             raise ShadeMapResponseError("ShadeMap returned invalid shadow information") from error
 
     async def _request(
@@ -93,68 +95,7 @@ class ShadeMapAdapter:
             return await client.get(url, params=params)
 
     @staticmethod
-    def _to_shadow_response(
-        payload: Mapping[str, Any],
-        request: ShadowRequest,
-    ) -> ShadowResponse:
-        """Validate provider data while supplying omitted request context."""
-        data: dict[str, Any] = dict(payload)
-        nested_data = data.get("data")
-        if isinstance(nested_data, Mapping):
-            data = dict(nested_data)
-
-        data.setdefault("viewport", request.viewport.model_dump())
-        data.setdefault("requested_time", request.requested_time)
-        if "coverage_confidence" not in data and "coverage" in data:
-            data["coverage_confidence"] = data["coverage"]
-        if "samples" not in data and isinstance(data.get("features"), list):
-            data["samples"] = ShadeMapAdapter._features_to_samples(data["features"], request)
-        return ShadowResponse.model_validate(data)
-
-    @staticmethod
-    def _features_to_samples(
-        features: list[Any],
-        request: ShadowRequest,
-    ) -> list[dict[str, Any]]:
-        samples: list[dict[str, Any]] = []
-        for feature in features:
-            if not isinstance(feature, Mapping):
-                continue
-            geometry = feature.get("geometry")
-            properties = feature.get("properties")
-            if not isinstance(geometry, Mapping) or not isinstance(properties, Mapping):
-                continue
-            coordinates = geometry.get("coordinates")
-            if (
-                geometry.get("type") != "Point"
-                or not isinstance(coordinates, list)
-                or len(coordinates) != 2
-            ):
-                continue
-            classification = properties.get("classification", properties.get("shade"))
-            if classification == "shade":
-                classification = "confirmed_shade"
-            elif classification in {"sun", "exposure"}:
-                classification = "confirmed_exposure"
-            if not isinstance(classification, str):
-                classification = "unknown"
-            sample: dict[str, Any] = {
-                "location": {
-                    "longitude": coordinates[0],
-                    "latitude": coordinates[1],
-                },
-                "classification": classification,
-                "evaluated_time": properties.get("evaluated_time", request.requested_time),
-            }
-            if classification == "unknown":
-                sample["unknown_reason"] = properties.get(
-                    "unknown_reason", "ShadeMap did not classify this location"
-                )
-            samples.append(sample)
-        return samples
-
-    @staticmethod
-    def _error_message(status_code: int, payload: Mapping[str, Any]) -> str:
+    def _error_message(status_code: int, payload: dict[str, Any]) -> str:
         message = payload.get("message") or payload.get("error")
         detail = message if isinstance(message, str) else "ShadeMap rejected the request"
         return f"ShadeMap request failed with status {status_code}: {detail}"
