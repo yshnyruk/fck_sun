@@ -292,7 +292,7 @@ export function RoutePlannerPanel({
                   <dd>{Math.round(selectedRoute.duration_s / 60)} min</dd>
                 </div>
                 <div>
-                  <dt>Overall shade coverage</dt>
+                  <dt>Selected route shade coverage</dt>
                   <dd>
                     {selectedRoute.shade?.shade_coverage_percent == null
                       ? "Unavailable"

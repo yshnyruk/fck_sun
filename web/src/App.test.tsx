@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitForElementToBeRemoved } from "@testing-library/react";
+import { fireEvent, render, screen, waitForElementToBeRemoved, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, it, expect, vi } from "vitest";
 import type { LngLatLike } from "maplibre-gl";
 import App from "./App";
@@ -201,12 +201,16 @@ describe("FckSun frontend", () => {
     );
     expect(screen.getByText(/1.2 km · 15 min/)).toBeDefined();
     expect(screen.getByText("Overall shade coverage")).toBeDefined();
-    expect(screen.getByText("65%")).toBeDefined();
-    expect(screen.getByText("Shade data coverage: Partial")).toBeDefined();
+    const selectedRouteDetails = within(
+      screen.getByRole("region", { name: "Selected route details" }),
+    );
+    expect(selectedRouteDetails.getByText("Selected route shade coverage")).toBeDefined();
+    expect(selectedRouteDetails.getByText("65%")).toBeDefined();
+    expect(selectedRouteDetails.getByText("Partial")).toBeDefined();
     expect(
-      screen.getByText("Some segments have unknown shade and are not counted as exposed."),
+      selectedRouteDetails.getByText("Some segments have unknown shade and are not counted as exposed."),
     ).toBeDefined();
-    expect(screen.getByText("Shade unknown for 200 m of this route")).toBeDefined();
+    expect(selectedRouteDetails.getByText("Shade unknown for 200 m of this route")).toBeDefined();
   });
 
   it("reverses the displayed points and submits their reversed coordinates", async () => {
