@@ -2,6 +2,7 @@ import * as maplibregl from "maplibre-gl";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Icon } from "./components/Icon";
 import { MapView } from "./components/MapView";
+import { config } from "./config";
 import type { MapStyleName } from "./map/mapConfig";
 import "./App.css";
 import "maplibre-gl/dist/maplibre-gl.css";
@@ -18,6 +19,29 @@ const recentDestinations = [
   "Sunset Beach",
   "Old Town",
 ];
+
+type DestinationSearchResult = {
+  name: string;
+  label: string;
+  coordinate: {
+    latitude: number;
+    longitude: number;
+  };
+};
+
+function isDestinationSearchResult(value: unknown): value is DestinationSearchResult {
+  if (!value || typeof value !== "object") return false;
+  const result = value as Record<string, unknown>;
+  const coordinate = result.coordinate;
+  if (!coordinate || typeof coordinate !== "object") return false;
+  const point = coordinate as Record<string, unknown>;
+  return (
+    typeof result.name === "string" &&
+    typeof result.label === "string" &&
+    typeof point.latitude === "number" &&
+    typeof point.longitude === "number"
+  );
+}
 
 function App() {
   type StartingLocationMethod = "current" | "manual";
@@ -48,6 +72,15 @@ function App() {
   const [locationError, setLocationError] = useState<string | null>(null);
   const [mapStyle, setMapStyle] = useState<MapStyleName>("default");
   const [mapStyleOpen, setMapStyleOpen] = useState(false);
+  const [destinationQuery, setDestinationQuery] = useState("");
+  const [destinationSuggestions, setDestinationSuggestions] = useState<
+    DestinationSearchResult[]
+  >([]);
+  const [destinationSearchState, setDestinationSearchState] = useState<
+    "idle" | "loading" | "error"
+  >("idle");
+  const [selectedDestination, setSelectedDestination] =
+    useState<DestinationSearchResult | null>(null);
   const setStartingLocation = useCallback((location: maplibregl.LngLatLike) => {
     const lngLat = maplibregl.LngLat.convert(location);
     if (!Number.isFinite(lngLat.lng) || !Number.isFinite(lngLat.lat)) return;
@@ -108,6 +141,65 @@ function App() {
       currentLocationMarkerRef.current = null;
     };
   }, []);
+
+  useEffect(() => {
+    const query = destinationQuery.trim();
+    if (query.length < 2 || selectedDestination?.name === query) return;
+
+    const controller = new AbortController();
+    const timeout = window.setTimeout(async () => {
+      setDestinationSearchState("loading");
+      try {
+        const response = await fetch(
+          `${config.apiBaseUrl}/search?q=${encodeURIComponent(query)}&limit=5`,
+          { signal: controller.signal },
+        );
+        if (!response.ok) {
+          throw new Error(`Destination search failed with status ${response.status}`);
+        }
+        const data: unknown = await response.json();
+        if (
+          !data ||
+          typeof data !== "object" ||
+          !("results" in data) ||
+          !Array.isArray(data.results)
+        ) {
+          throw new Error("Destination search returned an invalid response.");
+        }
+        if (!data.results.every(isDestinationSearchResult)) {
+          throw new Error("Destination search returned invalid results.");
+        }
+        setDestinationSuggestions(data.results);
+        setDestinationSearchState("idle");
+      } catch (error) {
+        if (error instanceof DOMException && error.name === "AbortError") return;
+        console.error("Unable to search for destinations.", error);
+        setDestinationSuggestions([]);
+        setDestinationSearchState("error");
+      }
+    }, 250);
+
+    return () => {
+      window.clearTimeout(timeout);
+      controller.abort();
+    };
+  }, [destinationQuery, selectedDestination]);
+
+  const handleDestinationQueryChange = (value: string) => {
+    setDestinationQuery(value);
+    setDestinationSuggestions([]);
+    setDestinationSearchState("idle");
+    if (selectedDestination && value !== selectedDestination.name) {
+      setSelectedDestination(null);
+    }
+  };
+  const handleDestinationSelect = (destination: DestinationSearchResult) => {
+    setDestinationQuery(destination.name);
+    setSelectedDestination(destination);
+    setDestinationSuggestions([]);
+    setDestinationSearchState("idle");
+    closeSearchScreen();
+  };
 
   const formattedTime = `${String(Math.floor(time)).padStart(2, "0")}:${time % 1 ? "30" : "00"}`;
   const collapsedHeight = 84;
@@ -415,6 +507,8 @@ function App() {
             <input
               aria-label="Search for a destination"
               placeholder="Where to?"
+              value={destinationQuery}
+              onChange={(event) => handleDestinationQueryChange(event.target.value)}
               onFocus={openSearchScreen}
             />
             <button
@@ -522,19 +616,61 @@ function App() {
                 >
                   <Icon name="back" />
                 </button>
-                <input autoFocus aria-label="Search for a destination" placeholder="Where to?" />
+                <input
+                  autoFocus
+                  aria-label="Search for a destination"
+                  placeholder="Where to?"
+                  value={destinationQuery}
+                  onChange={(event) => handleDestinationQueryChange(event.target.value)}
+                />
               </div>
             </div>
             <div className="recent-destinations">
-              <p>Recent destinations</p>
-              {recentDestinations.map((destination) => (
-                <button type="button" key={destination}>
-                  <span className="recent-icon">
-                    <Icon name="arrow" />
-                  </span>
-                  {destination}
-                </button>
-              ))}
+              {destinationSearchState === "loading" && (
+                <p role="status">Searching destinations...</p>
+              )}
+              {destinationSearchState === "error" && (
+                <p className="location-error" role="alert">
+                  Destination search is unavailable. Try again.
+                </p>
+              )}
+              {destinationSearchState === "idle" &&
+                destinationQuery.trim().length >= 2 &&
+                destinationSuggestions.length === 0 &&
+                !selectedDestination && <p>No matching destinations found.</p>}
+              {destinationSuggestions.length > 0 && (
+                <>
+                  <p>Matching destinations</p>
+                  {destinationSuggestions.map((destination) => (
+                    <button
+                      type="button"
+                      key={`${destination.name}-${destination.coordinate.latitude}-${destination.coordinate.longitude}`}
+                      onClick={() => handleDestinationSelect(destination)}
+                    >
+                      <span className="recent-icon">
+                        <Icon name="arrow" />
+                      </span>
+                      <span>
+                        <strong className="destination-name">{destination.name}</strong>
+                        <small className="destination-label">{destination.label}</small>
+                      </span>
+                    </button>
+                  ))}
+                </>
+              )}
+              {destinationQuery.trim().length < 2 && (
+                <>
+                  <p>Recent destinations</p>
+                  {recentDestinations.map((destination) => (
+                    <button type="button" key={destination}>
+                      <span className="recent-icon">
+                        <Icon name="arrow" />
+                      </span>
+                      {destination}
+                    </button>
+                  ))}
+                </>
+              )}
             </div>
           </div>
         )}

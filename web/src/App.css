@@ -413,6 +413,22 @@
   min-height: 48px;
 }
 
+.destination-name,
+.destination-label {
+  display: block;
+}
+
+.destination-name {
+  color: #244665;
+  font-size: 14px;
+}
+
+.destination-label {
+  margin-top: 2px;
+  color: #7691aa;
+  font-size: 11px;
+}
+
 .map-canvas:has(.search-screen) .controls-stack,
 .map-canvas:has(.search-screen) .time-dial {
   opacity: 0;
