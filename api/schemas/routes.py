@@ -100,6 +100,7 @@ class Route(BaseModel):
     geometry: LineStringGeometry
     distance_m: float = Field(gt=0)
     duration_s: float = Field(gt=0)
+    score: float | None = Field(default=None, ge=0, le=1)
     shade: ShadeEstimate | None = None
     coverage_confidence: CoverageConfidence
 

@@ -54,6 +54,8 @@ async def test_route_planning_service_returns_recommended_route_and_alternatives
 
     assert response.recommended_route.id == "route-1"
     assert response.alternatives[0].id == "route-2"
+    assert response.recommended_route.score is not None
+    assert response.alternatives[0].score is not None
 
 
 @pytest.mark.anyio

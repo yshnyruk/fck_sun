@@ -2,7 +2,7 @@ import pytest
 
 from api.schemas.route_coverage import RouteShadeCoverage
 from api.schemas.routes import CoverageConfidence, LineStringGeometry, Route, ShadePreference
-from api.services.route_scoring import DEFAULT_SCORING_WEIGHTS, score_routes
+from api.services.route_scoring import DEFAULT_SCORING_WEIGHTS, rank_routes, score_routes
 
 
 def route(route_id: str, distance_m: float, duration_s: float) -> Route:
@@ -71,3 +71,17 @@ def test_all_insufficient_routes_renormalize_efficiency_weights() -> None:
     assert scored[0].weights.shade == 0
     assert scored[0].weights.distance == pytest.approx(0.5)
     assert scored[0].weights.duration == pytest.approx(0.5)
+
+
+def test_rank_routes_attaches_scores_and_orders_routes() -> None:
+    routes = [route("slow", 1200, 1200), route("fast", 1000, 1000)]
+    coverages = {
+        "slow": coverage(1000),
+        "fast": coverage(0),
+    }
+
+    ranked = rank_routes(routes, coverages, ShadePreference.NO_SHADOW)
+
+    assert [item.id for item in ranked] == ["fast", "slow"]
+    assert ranked[0].score == pytest.approx(0.95)
+    assert ranked[1].score is not None

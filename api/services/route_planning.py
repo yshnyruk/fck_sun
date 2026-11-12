@@ -2,7 +2,15 @@
 
 from typing import Protocol
 
-from api.schemas.routes import Coordinate, Route, RouteRequest, RouteResponse
+from api.schemas.route_coverage import RouteShadeCoverage
+from api.schemas.routes import (
+    Coordinate,
+    CoverageConfidence,
+    Route,
+    RouteRequest,
+    RouteResponse,
+)
+from api.services.route_scoring import rank_routes
 
 
 class RoutePlanningError(Exception):
@@ -32,7 +40,27 @@ class RoutePlanningService:
         )
         if not routes:
             raise RoutePlanningError("No pedestrian route was returned by the routing provider")
+        coverages = {
+            route.id: _coverage_for_route(route)
+            for route in routes
+        }
+        ranked_routes = rank_routes(routes, coverages, request.shade_preference)
         return RouteResponse(
-            recommended_route=routes[0],
-            alternatives=routes[1:],
+            recommended_route=ranked_routes[0],
+            alternatives=ranked_routes[1:],
         )
+
+
+def _coverage_for_route(route: Route) -> RouteShadeCoverage:
+    """Represent unavailable provider shade data without inferring exposure."""
+    return RouteShadeCoverage(
+        total_distance_m=route.distance_m,
+        shaded_distance_m=0,
+        exposed_distance_m=0,
+        unknown_distance_m=route.distance_m,
+        shaded_percentage=0,
+        exposed_percentage=0,
+        unknown_percentage=100,
+        usable_percentage=0,
+        coverage_confidence=CoverageConfidence.INSUFFICIENT,
+    )

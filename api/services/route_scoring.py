@@ -96,6 +96,21 @@ def score_routes(
     )
 
 
+def rank_routes(
+    routes: Sequence[Route],
+    coverages: Mapping[str, RouteShadeCoverage],
+    preference: ShadePreference,
+) -> list[Route]:
+    """Attach calculated scores and return routes ordered best to worst."""
+    scores = score_routes(routes, coverages, preference)
+    return [
+        next(route for route in routes if route.id == route_score.route_id).model_copy(
+            update={"score": route_score.score}
+        )
+        for route_score in scores
+    ]
+
+
 def _effective_weights(
     weights: RouteScoringWeights,
     all_insufficient: bool,
