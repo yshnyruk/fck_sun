@@ -63,6 +63,20 @@ to UTC. Requests are cached by midpoint and timestamp to avoid duplicate
 provider calls. Provider failures and empty responses affect only the
 corresponding segment and are represented as `unknown`.
 
+## Overall route shade coverage
+
+`calculate_route_shade_coverage` summarizes `SegmentShadow` results using each
+segment's distance. Confirmed shade and exposure contribute to their respective
+distance totals; unknown or missing segment results contribute only to
+`unknown_distance_m`. The returned `RouteShadeCoverage` exposes all three
+distances and percentages, so unknown conditions are never silently counted as
+sunlight or shade.
+
+When a segment contains a valid provider shade percentage, only that segment's
+distance is split between shaded and exposed totals. A route with no classified
+distance is marked `insufficient`; any unknown distance or non-high segment
+confidence makes the overall result `partial`.
+
 ## Development
 
 Install the backend dependencies in a virtual environment and the frontend
