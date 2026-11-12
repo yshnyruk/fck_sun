@@ -74,9 +74,7 @@ function App() {
   const selectedMarkerRef = useRef<maplibregl.Marker | null>(null);
   const [shadePreference, setShadePreference] = useState<ShadePreference>("full");
   const [navigationStarted, setNavigationStarted] = useState(false);
-  const [routeRequestState, setRouteRequestState] = useState<"idle" | "loading" | "error">(
-    "idle",
-  );
+  const [routeRequestState, setRouteRequestState] = useState<"idle" | "loading" | "error">("idle");
   const [routeRequestError, setRouteRequestError] = useState<string | null>(null);
   const [mapStyle, setMapStyle] = useState<MapStyleName>("default");
   const [mapStyleOpen, setMapStyleOpen] = useState(false);
@@ -91,6 +89,9 @@ function App() {
     null,
   );
   const [planningMode, setPlanningMode] = useState<PlanningMode>("leave_now");
+  const [minimumPlanningDateTime] = useState(() =>
+    toLocalDateTimeInput(new Date(Date.now() + 60_000)),
+  );
   const [planningModeMenuOpen, setPlanningModeMenuOpen] = useState(false);
   const [planningModeMenuAbove, setPlanningModeMenuAbove] = useState(false);
   const planningModeTriggerRef = useRef<HTMLButtonElement | null>(null);
@@ -108,9 +109,7 @@ function App() {
       const optionsHeight = options.getBoundingClientRect().height;
       const spaceBelow = window.innerHeight - triggerRect.bottom;
       const spaceAbove = triggerRect.top;
-      setPlanningModeMenuAbove(
-        spaceBelow < optionsHeight + 8 && spaceAbove >= optionsHeight + 8,
-      );
+      setPlanningModeMenuAbove(spaceBelow < optionsHeight + 8 && spaceAbove >= optionsHeight + 8);
     };
 
     positionMenu();
@@ -236,6 +235,8 @@ function App() {
     setSelectedDestination(destination);
     selectedDestinationRef.current = destination;
     setNavigationStarted(false);
+    setRouteRequestError(null);
+    setRouteRequestState("idle");
     setDestinationSuggestions([]);
     setDestinationSearchState("idle");
     setIsClosingSearch(true);
@@ -248,23 +249,42 @@ function App() {
     }, 260);
   };
   const startNavigation = async () => {
-    if (!selectedDestination || !selectedLocation) {
-      setRouteRequestError("Your current location is not available yet.");
+    if (!selectedDestination) {
+      setRouteRequestError("Choose a destination before planning a route.");
+      setRouteRequestState("error");
+      return;
+    }
+    if (!selectedLocation) {
+      setRouteRequestError("Choose a starting location before planning a route.");
       setRouteRequestState("error");
       return;
     }
 
     const departureTime = planningMode === "depart_at" ? toUtcISOString(departureDateTime) : null;
-    if (planningMode === "depart_at" && (!departureTime || new Date(departureTime) <= new Date())) {
-      setRouteRequestError("Choose a future departure date and time.");
-      setRouteRequestState("error");
-      return;
+    if (planningMode === "depart_at") {
+      if (!departureTime) {
+        setRouteRequestError("Enter a valid departure date and time.");
+        setRouteRequestState("error");
+        return;
+      }
+      if (new Date(departureTime) <= new Date()) {
+        setRouteRequestError("Departure time must be in the future.");
+        setRouteRequestState("error");
+        return;
+      }
     }
     const arrivalTime = planningMode === "arrive_by" ? toUtcISOString(arrivalDateTime) : null;
-    if (planningMode === "arrive_by" && (!arrivalTime || new Date(arrivalTime) <= new Date())) {
-      setRouteRequestError("Choose a future arrival date and time.");
-      setRouteRequestState("error");
-      return;
+    if (planningMode === "arrive_by") {
+      if (!arrivalTime) {
+        setRouteRequestError("Enter a valid arrival date and time.");
+        setRouteRequestState("error");
+        return;
+      }
+      if (new Date(arrivalTime) <= new Date()) {
+        setRouteRequestError("Arrival time must be in the future.");
+        setRouteRequestState("error");
+        return;
+      }
     }
 
     setRouteRequestState("loading");
@@ -302,9 +322,10 @@ function App() {
   };
 
   const formattedTime = `${String(Math.floor(time)).padStart(2, "0")}:${time % 1 ? "30" : "00"}`;
-  const planningModeLabel = planningMode === "leave_now"
-    ? `Leave ${new Intl.DateTimeFormat(undefined, { hour: "numeric", minute: "2-digit" }).format(new Date())}`
-    : PLANNING_MODES.find((mode) => mode.value === planningMode)?.label ?? "Leave now";
+  const planningModeLabel =
+    planningMode === "leave_now"
+      ? `Leave ${new Intl.DateTimeFormat(undefined, { hour: "numeric", minute: "2-digit" }).format(new Date())}`
+      : (PLANNING_MODES.find((mode) => mode.value === planningMode)?.label ?? "Leave now");
   const collapsedHeight = 84;
   const getSnapHeights = () => [
     collapsedHeight,
@@ -328,6 +349,8 @@ function App() {
       selectedMarkerRef.current = null;
       setSelectedLocation(null);
       selectedLocationRef.current = null;
+      setRouteRequestError(null);
+      setRouteRequestState("idle");
       return;
     }
 
@@ -347,6 +370,8 @@ function App() {
     selectedMarkerRef.current = marker;
     selectedLocationRef.current = lngLat;
     setSelectedLocation(lngLat);
+    setRouteRequestError(null);
+    setRouteRequestState("idle");
   }, []);
   const handleMapClick = useCallback(() => {
     if (!selectedMarkerRef.current) return false;
@@ -473,7 +498,6 @@ function App() {
             <div className="map-style-options" role="group" aria-label="Map style">
               {(["default", "satellite", "terrain"] as const).map((styleName) => (
                 <button
-                  ref={planningModeTriggerRef}
                   key={styleName}
                   className={mapStyle === styleName ? "selected" : ""}
                   type="button"
@@ -669,6 +693,7 @@ function App() {
               </div>
               <div className="planning-mode">
                 <button
+                  ref={planningModeTriggerRef}
                   className="planning-mode-trigger"
                   type="button"
                   aria-label={`Planning time: ${planningModeLabel}`}
@@ -699,6 +724,8 @@ function App() {
                         onClick={(event) => {
                           event.stopPropagation();
                           setPlanningMode(mode.value);
+                          setRouteRequestError(null);
+                          setRouteRequestState("idle");
                           setPlanningModeMenuOpen(false);
                         }}
                       >
@@ -713,7 +740,7 @@ function App() {
                       aria-label="Departure date and time"
                       type="datetime-local"
                       required
-                      min={toLocalDateTimeInput(new Date(Date.now() + 60_000))}
+                      min={minimumPlanningDateTime}
                       value={departureDateTime}
                       onChange={(event) => {
                         setDepartureDateTime(event.target.value);
@@ -729,7 +756,7 @@ function App() {
                       aria-label="Arrival date and time"
                       type="datetime-local"
                       required
-                      min={toLocalDateTimeInput(new Date(Date.now() + 60_000))}
+                      min={minimumPlanningDateTime}
                       value={arrivalDateTime}
                       onChange={(event) => {
                         setArrivalDateTime(event.target.value);
