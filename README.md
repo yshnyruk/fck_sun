@@ -89,6 +89,13 @@ These defaults make the confidence decision conservative: unknown distance is
 never classified as exposure, and an insufficient shade result does not remove
 the standard pedestrian route.
 
+## Route scoring model
+
+The documented scoring model balances confirmed shade, walking distance, and
+estimated duration according to the selected shade preference. It defines the
+normalization, default weights, and insufficient/partial coverage behavior in
+[ROUTE_SCORING.md](./ROUTE_SCORING.md).
+
 ## Development
 
 Install the backend dependencies in a virtual environment and the frontend
