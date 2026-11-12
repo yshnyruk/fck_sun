@@ -33,4 +33,6 @@ class Settings(BaseSettings):
 
 @lru_cache
 def get_settings() -> Settings:
-    return Settings(_env_file=Path(__file__).resolve().parents[1] / ".env")
+    return Settings(  # type: ignore[call-arg]  # _env_file is supported at runtime by pydantic-settings.
+        _env_file=Path(__file__).resolve().parents[1] / ".env"
+    )

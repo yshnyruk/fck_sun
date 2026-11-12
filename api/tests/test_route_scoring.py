@@ -105,6 +105,7 @@ def test_select_recommended_route_returns_highest_scoring_route() -> None:
     assert recommended.id == "shade"
     assert recommended.score is not None
     assert alternatives[0].id == "efficient"
+    assert alternatives[0].score is not None
     assert recommended.score > alternatives[0].score
 
 

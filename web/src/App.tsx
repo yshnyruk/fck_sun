@@ -73,14 +73,15 @@ function App() {
   const [mapStyle, setMapStyle] = useState<MapStyleName>("default");
   const [mapStyleOpen, setMapStyleOpen] = useState(false);
   const [destinationQuery, setDestinationQuery] = useState("");
-  const [destinationSuggestions, setDestinationSuggestions] = useState<
-    DestinationSearchResult[]
-  >([]);
+  const [destinationSuggestions, setDestinationSuggestions] = useState<DestinationSearchResult[]>(
+    [],
+  );
   const [destinationSearchState, setDestinationSearchState] = useState<
     "idle" | "loading" | "error"
   >("idle");
-  const [selectedDestination, setSelectedDestination] =
-    useState<DestinationSearchResult | null>(null);
+  const [selectedDestination, setSelectedDestination] = useState<DestinationSearchResult | null>(
+    null,
+  );
   const setStartingLocation = useCallback((location: maplibregl.LngLatLike) => {
     const lngLat = maplibregl.LngLat.convert(location);
     if (!Number.isFinite(lngLat.lng) || !Number.isFinite(lngLat.lat)) return;
@@ -528,7 +529,11 @@ function App() {
             <div className="recent-destinations">
               <div className="starting-location">
                 <p>Starting location</p>
-                <div className="starting-location-methods" role="group" aria-label="Starting location method">
+                <div
+                  className="starting-location-methods"
+                  role="group"
+                  aria-label="Starting location method"
+                >
                   <button
                     className={startingLocationMethod === "current" ? "selected" : ""}
                     type="button"
@@ -590,7 +595,9 @@ function App() {
                     {locationError}
                   </p>
                 )}
-                <p className="location-help">You can also tap the map to choose a starting point.</p>
+                <p className="location-help">
+                  You can also tap the map to choose a starting point.
+                </p>
               </div>
               <p>Recent destinations</p>
               {recentDestinations.map((destination) => (
