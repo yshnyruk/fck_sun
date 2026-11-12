@@ -729,25 +729,40 @@
 }
 
 .planning-mode {
-  padding-top: 14px;
-}
-
-.planning-mode > p {
-  margin: 0 0 7px 4px;
-  color: #7691aa;
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding-top: 12px;
 }
 
 .planning-mode-options {
+  position: absolute;
+  z-index: 5;
+  top: calc(100% + 5px);
+  left: 0;
   display: grid;
-  grid-template-columns: 1fr;
+  width: min(230px, 100%);
+  padding: 5px;
+  border: 1px solid #d6e5f1;
+  border-radius: 12px;
+  background: white;
+  box-shadow: 0 8px 24px rgba(33, 79, 117, 0.16);
 }
 
+.planning-mode-options.above {
+  top: auto;
+  bottom: calc(100% + 5px);
+}
+
+.planning-mode-trigger,
 .planning-mode-options button {
-  min-height: 38px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 36px;
   padding: 7px 10px;
   border: 1px solid #c8dcec;
   border-radius: 9px;
@@ -755,6 +770,24 @@
   background: #f7fbff;
   font-size: 12px;
   font-weight: 700;
+}
+
+.planning-mode-trigger {
+  height: 42px;
+  width: fit-content;
+  min-width: 132px;
+  color: #2775b8;
+  background: #f7fbff;
+}
+
+.planning-mode-trigger span {
+  color: #7691aa;
+}
+
+.planning-mode-options button {
+  border-color: transparent;
+  background: transparent;
+  text-align: left;
 }
 
 .planning-mode-options button.selected {
@@ -765,8 +798,10 @@
 
 .departure-time-field {
   display: grid;
+  flex: 1;
   gap: 6px;
-  margin-top: 10px;
+  max-width: 240px;
+  margin-top: 0;
   color: #52718e;
   font-size: 12px;
   font-weight: 600;
@@ -774,7 +809,8 @@
 
 .departure-time-field input {
   width: 100%;
-  min-height: 42px;
+  box-sizing: border-box;
+  height: 42px;
   padding: 8px 10px;
   border: 1px solid #c8dcec;
   border-radius: 9px;

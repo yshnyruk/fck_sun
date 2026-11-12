@@ -1,5 +1,5 @@
 import * as maplibregl from "maplibre-gl";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Icon } from "./components/Icon";
 import { MapView } from "./components/MapView";
 import { config } from "./config";
@@ -34,6 +34,7 @@ type DestinationSearchResult = {
 const PLANNING_MODES = [
   { value: "leave_now", label: "Leave now" },
   { value: "depart_at", label: "Depart at" },
+  { value: "arrive_by", label: "Arrive by" },
 ] as const;
 type PlanningMode = (typeof PLANNING_MODES)[number]["value"];
 
@@ -90,7 +91,36 @@ function App() {
     null,
   );
   const [planningMode, setPlanningMode] = useState<PlanningMode>("leave_now");
+  const [planningModeMenuOpen, setPlanningModeMenuOpen] = useState(false);
+  const [planningModeMenuAbove, setPlanningModeMenuAbove] = useState(false);
+  const planningModeTriggerRef = useRef<HTMLButtonElement | null>(null);
+  const planningModeOptionsRef = useRef<HTMLDivElement | null>(null);
   const [departureDateTime, setDepartureDateTime] = useState("");
+  const [arrivalDateTime, setArrivalDateTime] = useState("");
+  useLayoutEffect(() => {
+    if (!planningModeMenuOpen) return;
+
+    const positionMenu = () => {
+      const trigger = planningModeTriggerRef.current;
+      const options = planningModeOptionsRef.current;
+      if (!trigger || !options) return;
+      const triggerRect = trigger.getBoundingClientRect();
+      const optionsHeight = options.getBoundingClientRect().height;
+      const spaceBelow = window.innerHeight - triggerRect.bottom;
+      const spaceAbove = triggerRect.top;
+      setPlanningModeMenuAbove(
+        spaceBelow < optionsHeight + 8 && spaceAbove >= optionsHeight + 8,
+      );
+    };
+
+    positionMenu();
+    window.addEventListener("resize", positionMenu);
+    window.addEventListener("scroll", positionMenu, true);
+    return () => {
+      window.removeEventListener("resize", positionMenu);
+      window.removeEventListener("scroll", positionMenu, true);
+    };
+  }, [planningModeMenuOpen]);
   const selectedDestinationRef = useRef<DestinationSearchResult | null>(null);
   const setStartingLocation = useCallback((location: maplibregl.LngLatLike) => {
     const lngLat = maplibregl.LngLat.convert(location);
@@ -230,6 +260,12 @@ function App() {
       setRouteRequestState("error");
       return;
     }
+    const arrivalTime = planningMode === "arrive_by" ? toUtcISOString(arrivalDateTime) : null;
+    if (planningMode === "arrive_by" && (!arrivalTime || new Date(arrivalTime) <= new Date())) {
+      setRouteRequestError("Choose a future arrival date and time.");
+      setRouteRequestState("error");
+      return;
+    }
 
     setRouteRequestState("loading");
     setRouteRequestError(null);
@@ -247,7 +283,9 @@ function App() {
           shade_preference: shadePreference,
           ...(planningMode === "depart_at"
             ? { departure_time: departureTime }
-            : { departure_time: new Date().toISOString() }),
+            : planningMode === "arrive_by"
+              ? { arrival_time: arrivalTime }
+              : { departure_time: new Date().toISOString() }),
         }),
       });
       if (!response.ok) {
@@ -264,6 +302,9 @@ function App() {
   };
 
   const formattedTime = `${String(Math.floor(time)).padStart(2, "0")}:${time % 1 ? "30" : "00"}`;
+  const planningModeLabel = planningMode === "leave_now"
+    ? `Leave ${new Intl.DateTimeFormat(undefined, { hour: "numeric", minute: "2-digit" }).format(new Date())}`
+    : PLANNING_MODES.find((mode) => mode.value === planningMode)?.label ?? "Leave now";
   const collapsedHeight = 84;
   const getSnapHeights = () => [
     collapsedHeight,
@@ -432,6 +473,7 @@ function App() {
             <div className="map-style-options" role="group" aria-label="Map style">
               {(["default", "satellite", "terrain"] as const).map((styleName) => (
                 <button
+                  ref={planningModeTriggerRef}
                   key={styleName}
                   className={mapStyle === styleName ? "selected" : ""}
                   type="button"
@@ -626,26 +668,47 @@ function App() {
                 ))}
               </div>
               <div className="planning-mode">
-                <p>Planning mode</p>
-                <div className="planning-mode-options" role="group" aria-label="Planning mode">
-                  {PLANNING_MODES.map((mode) => (
-                    <button
-                      key={mode.value}
-                      className={planningMode === mode.value ? "selected" : ""}
-                      type="button"
-                      aria-pressed={planningMode === mode.value}
-                      onClick={(event) => {
-                        event.stopPropagation();
-                        setPlanningMode(mode.value);
-                      }}
-                    >
-                      {mode.label}
-                    </button>
-                  ))}
-                </div>
+                <button
+                  className="planning-mode-trigger"
+                  type="button"
+                  aria-label={`Planning time: ${planningModeLabel}`}
+                  aria-haspopup="listbox"
+                  aria-expanded={planningModeMenuOpen}
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    setPlanningModeMenuOpen((open) => !open);
+                  }}
+                >
+                  {planningModeLabel}
+                  <span aria-hidden="true">▾</span>
+                </button>
+                {planningModeMenuOpen && (
+                  <div
+                    ref={planningModeOptionsRef}
+                    className={`planning-mode-options ${planningModeMenuAbove ? "above" : ""}`}
+                    role="listbox"
+                    aria-label="Planning time"
+                  >
+                    {PLANNING_MODES.map((mode) => (
+                      <button
+                        key={mode.value}
+                        className={planningMode === mode.value ? "selected" : ""}
+                        type="button"
+                        role="option"
+                        aria-selected={planningMode === mode.value}
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          setPlanningMode(mode.value);
+                          setPlanningModeMenuOpen(false);
+                        }}
+                      >
+                        {mode.value === "leave_now" ? "Leave now" : mode.label}
+                      </button>
+                    ))}
+                  </div>
+                )}
                 {planningMode === "depart_at" && (
                   <label className="departure-time-field">
-                    <span>Departure date and time</span>
                     <input
                       aria-label="Departure date and time"
                       type="datetime-local"
@@ -654,6 +717,22 @@ function App() {
                       value={departureDateTime}
                       onChange={(event) => {
                         setDepartureDateTime(event.target.value);
+                        setRouteRequestError(null);
+                        if (routeRequestState === "error") setRouteRequestState("idle");
+                      }}
+                    />
+                  </label>
+                )}
+                {planningMode === "arrive_by" && (
+                  <label className="departure-time-field">
+                    <input
+                      aria-label="Arrival date and time"
+                      type="datetime-local"
+                      required
+                      min={toLocalDateTimeInput(new Date(Date.now() + 60_000))}
+                      value={arrivalDateTime}
+                      onChange={(event) => {
+                        setArrivalDateTime(event.target.value);
                         setRouteRequestError(null);
                         if (routeRequestState === "error") setRouteRequestState("idle");
                       }}
