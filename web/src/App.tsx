@@ -60,6 +60,7 @@ function App() {
   const mapRef = useRef<maplibregl.Map | null>(null);
   const currentLocationMarkerRef = useRef<maplibregl.Marker | null>(null);
   const destinationMarkerRef = useRef<maplibregl.Marker | null>(null);
+  const routeRequestControllerRef = useRef<AbortController | null>(null);
   const [selectedLocation, setSelectedLocation] = useState<maplibregl.LngLat | null>(null);
   const [startingPointLabel, setStartingPointLabel] = useState("Choose a starting point");
   const [startingPointDetail, setStartingPointDetail] = useState("");
@@ -126,10 +127,12 @@ function App() {
       setStartingPointDetail(detail);
       setRouteRequestError(null);
       setRouteRequestState("idle");
+      setPlannedRoutes(null);
+      setNavigationStarted(false);
     },
     [],
   );
-  const focusCurrentLocation = useCallback(() => {
+  const focusCurrentLocation = useCallback((focusMap = true) => {
     if (!navigator.geolocation) {
       setRouteRequestError("Location access is unavailable. Choose a starting point on the map.");
       setRouteRequestState("error");
@@ -161,11 +164,13 @@ function App() {
             event.stopPropagation();
           });
         }
-        map.flyTo({
-          center: location,
-          zoom: Math.max(map.getZoom(), 15),
-          essential: true,
-        });
+        if (focusMap) {
+          map.flyTo({
+            center: location,
+            zoom: Math.max(map.getZoom(), 15),
+            essential: true,
+          });
+        }
       },
       (error) => {
         console.error("Unable to determine the user's current location.", error);
@@ -176,6 +181,37 @@ function App() {
     );
   }, [setStartingLocation]);
 
+  const showDestinationOnMap = useCallback(
+    (destination: DestinationSearchResult, onMarkerClick?: () => void) => {
+      const map = mapRef.current;
+      if (!map) return;
+      const location: maplibregl.LngLatLike = [
+        destination.coordinate.longitude,
+        destination.coordinate.latitude,
+      ];
+      destinationMarkerRef.current?.remove();
+      const markerElement = document.createElement("div");
+      markerElement.className = "destination-location-marker";
+      markerElement.setAttribute("aria-label", destination.name);
+      destinationMarkerRef.current = new maplibregl.Marker({
+        element: markerElement,
+        anchor: "center",
+      })
+        .setLngLat(location)
+        .addTo(map);
+      destinationMarkerRef.current.getElement().addEventListener("click", (event) => {
+        event.stopPropagation();
+        onMarkerClick?.();
+      });
+      map.flyTo({
+        center: location,
+        zoom: Math.max(map.getZoom(), 15),
+        essential: true,
+      });
+    },
+    [],
+  );
+
   useEffect(() => {
     return () => {
       if (searchCloseTimeoutRef.current !== null) {
@@ -185,6 +221,7 @@ function App() {
       currentLocationMarkerRef.current = null;
       destinationMarkerRef.current?.remove();
       destinationMarkerRef.current = null;
+      routeRequestControllerRef.current?.abort();
     };
   }, []);
 
@@ -253,12 +290,12 @@ function App() {
       );
       setDestinationQuery("");
     } else {
-      destinationMarkerRef.current?.remove();
-      destinationMarkerRef.current = null;
       setDestinationQuery(destination.name);
       setSelectedDestination(destination);
       selectedDestinationRef.current = destination;
-      if (!selectedLocationRef.current) focusCurrentLocation();
+      setPlannedRoutes(null);
+      showDestinationOnMap(destination);
+      if (!selectedLocationRef.current) focusCurrentLocation(false);
     }
     setNavigationStarted(false);
     setRouteRequestError(null);
@@ -282,7 +319,7 @@ function App() {
       searchCloseTimeoutRef.current = null;
     }, 260);
   };
-  const startNavigation = async () => {
+  const planRoute = useCallback(async () => {
     if (!selectedDestination) {
       setRouteRequestError("Choose a destination before planning a route.");
       setRouteRequestState("error");
@@ -324,10 +361,15 @@ function App() {
     setRouteRequestState("loading");
     setRouteRequestError(null);
     setPlannedRoutes(null);
+    setNavigationStarted(false);
+    routeRequestControllerRef.current?.abort();
+    const controller = new AbortController();
+    routeRequestControllerRef.current = controller;
     try {
       const response = await fetch(`${config.apiBaseUrl}/routes`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        signal: controller.signal,
         body: JSON.stringify({
           origin: {
             latitude: selectedLocation.lat,
@@ -350,12 +392,43 @@ function App() {
       if (!result) throw new Error("Route planning returned an invalid response");
       setPlannedRoutes(result);
       setRouteRequestState("idle");
-      setNavigationStarted(true);
     } catch (error) {
-      console.error("Unable to start navigation.", error);
+      if (controller.signal.aborted) return;
+      console.error("Unable to plan this route.", error);
       setRouteRequestState("error");
       setRouteRequestError("Unable to plan this route. Try again.");
+    } finally {
+      if (routeRequestControllerRef.current === controller) {
+        routeRequestControllerRef.current = null;
+      }
     }
+  }, [
+    arrivalDateTime,
+    departureDateTime,
+    planningMode,
+    selectedDestination,
+    selectedLocation,
+    shadePreference,
+  ]);
+
+  useEffect(() => {
+    if (!selectedDestination || !selectedLocation) return;
+    let cancelled = false;
+    queueMicrotask(() => {
+      if (!cancelled) void planRoute();
+    });
+    return () => {
+      cancelled = true;
+      routeRequestControllerRef.current?.abort();
+    };
+  }, [planRoute, selectedDestination, selectedLocation]);
+
+  const startNavigation = () => {
+    if (plannedRoutes) {
+      setNavigationStarted(true);
+      return;
+    }
+    void planRoute();
   };
 
   const formattedTime = `${String(Math.floor(time)).padStart(2, "0")}:${time % 1 ? "30" : "00"}`;
@@ -383,6 +456,7 @@ function App() {
     setDestinationSuggestions([]);
     setDestinationSearchState("idle");
     setNavigationStarted(false);
+    setPlannedRoutes(null);
     setRouteRequestError(null);
     setRouteRequestState("idle");
     setPanelExpanded(false);
@@ -406,6 +480,7 @@ function App() {
       setSelectedDestination(destination);
       setDestinationQuery(destination.name);
       setNavigationStarted(false);
+      setPlannedRoutes(null);
       setRouteRequestError(null);
       setRouteRequestState("idle");
       setIsPickingDestinationOnMap(false);
@@ -415,27 +490,11 @@ function App() {
       setDestinationSearchState("idle");
       setPanelExpanded(true);
       setPanelHeight(Math.round(window.innerHeight * 0.4));
-      if (!selectedLocationRef.current) focusCurrentLocation();
+      if (!selectedLocationRef.current) focusCurrentLocation(false);
 
-      const map = mapRef.current;
-      if (map) {
-        destinationMarkerRef.current?.remove();
-        const markerElement = document.createElement("div");
-        markerElement.className = "destination-location-marker";
-        markerElement.setAttribute("aria-label", "Pinned destination");
-        destinationMarkerRef.current = new maplibregl.Marker({
-          element: markerElement,
-          anchor: "center",
-        })
-          .setLngLat(lngLat)
-          .addTo(map);
-        destinationMarkerRef.current.getElement().addEventListener("click", (event) => {
-          event.stopPropagation();
-          clearDestination();
-        });
-      }
+      showDestinationOnMap(destination, clearDestination);
     },
-    [clearDestination, focusCurrentLocation],
+    [clearDestination, focusCurrentLocation, showDestinationOnMap],
   );
   const reverseRoutePoints = () => {
     if (!selectedDestination || !selectedLocation) return;
@@ -462,9 +521,11 @@ function App() {
     setStartingPointDetail(previousDestination.label);
     setSelectedDestination(nextDestination);
     selectedDestinationRef.current = nextDestination;
+    showDestinationOnMap(nextDestination);
     setSearchTarget("destination");
     setDestinationQuery(nextDestination.name);
     setNavigationStarted(false);
+    setPlannedRoutes(null);
     setRouteRequestError(null);
     setRouteRequestState("idle");
   };

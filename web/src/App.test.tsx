@@ -161,6 +161,7 @@ describe("FckSun frontend", () => {
     fireEvent.click(screen.getByRole("button", { name: "Set test starting location" }));
 
     await selectCentralPark();
+    expect(fetchMock.mock.calls.some(([input]) => String(input).endsWith("/routes"))).toBe(true);
     expect((screen.getByLabelText("Starting point") as HTMLInputElement).value).toBe(
       "Current location",
     );
@@ -193,10 +194,11 @@ describe("FckSun frontend", () => {
       ok: true,
       json: async () => routeResponse,
     } as Response);
+    expect(await screen.findByText("Recommended route")).toBeDefined();
+    fireEvent.click(screen.getByRole("button", { name: "Start navigation" }));
     expect((await screen.findByRole("button", { name: "Navigation started" })).textContent).toBe(
       "Navigation started",
     );
-    expect(screen.getByText("Recommended route")).toBeDefined();
     expect(screen.getByText(/1.2 km · 15 min/)).toBeDefined();
     expect(screen.getByText(/Estimated shade 65% · Partial data coverage/)).toBeDefined();
     expect(screen.getByText("Shade unknown for 200 m of this route")).toBeDefined();

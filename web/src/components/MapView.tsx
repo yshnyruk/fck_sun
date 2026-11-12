@@ -115,6 +115,7 @@ export function MapView({
 
     const renderRoute = () => {
       if (map.getLayer("planned-route-line")) map.removeLayer("planned-route-line");
+      if (map.getLayer("planned-route-casing")) map.removeLayer("planned-route-casing");
       if (map.getSource("planned-route")) map.removeSource("planned-route");
       if (!route) return;
       map.addSource("planned-route", {
@@ -122,11 +123,18 @@ export function MapView({
         data: { type: "Feature", properties: {}, geometry: route.geometry },
       });
       map.addLayer({
+        id: "planned-route-casing",
+        type: "line",
+        source: "planned-route",
+        layout: { "line-cap": "round", "line-join": "round" },
+        paint: { "line-color": "#ffffff", "line-width": 11, "line-opacity": 0.96 },
+      });
+      map.addLayer({
         id: "planned-route-line",
         type: "line",
         source: "planned-route",
         layout: { "line-cap": "round", "line-join": "round" },
-        paint: { "line-color": "#1876c9", "line-width": 6, "line-opacity": 0.92 },
+        paint: { "line-color": "#126fc1", "line-width": 6, "line-opacity": 1 },
       });
       const coordinates = route.geometry.coordinates;
       const bounds = coordinates.reduce(
