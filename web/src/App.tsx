@@ -20,6 +20,8 @@ const recentDestinations = [
 ];
 
 function App() {
+  type StartingLocationMethod = "current" | "manual";
+
   const [shadowsEnabled, setShadowsEnabled] = useState(true);
   const [searchOpen, setSearchOpen] = useState(false);
   const [isClosingSearch, setIsClosingSearch] = useState(false);
@@ -39,10 +41,24 @@ function App() {
   const [selectedLocation, setSelectedLocation] = useState<maplibregl.LngLat | null>(null);
   const selectedLocationRef = useRef<maplibregl.LngLat | null>(null);
   const selectedMarkerRef = useRef<maplibregl.Marker | null>(null);
+  const [startingLocationMethod, setStartingLocationMethod] =
+    useState<StartingLocationMethod>("current");
+  const [manualLatitude, setManualLatitude] = useState("");
+  const [manualLongitude, setManualLongitude] = useState("");
+  const [locationError, setLocationError] = useState<string | null>(null);
   const [mapStyle, setMapStyle] = useState<MapStyleName>("default");
   const [mapStyleOpen, setMapStyleOpen] = useState(false);
+  const setStartingLocation = useCallback((location: maplibregl.LngLatLike) => {
+    const lngLat = maplibregl.LngLat.convert(location);
+    if (!Number.isFinite(lngLat.lng) || !Number.isFinite(lngLat.lat)) return;
+    setSelectedLocation(lngLat);
+    selectedLocationRef.current = lngLat;
+  }, []);
   const focusCurrentLocation = useCallback(() => {
-    if (!navigator.geolocation || !mapRef.current) return;
+    if (!navigator.geolocation) {
+      setLocationError("Current location is not available in this browser.");
+      return;
+    }
 
     navigator.geolocation.getCurrentPosition(
       (position) => {
@@ -51,7 +67,12 @@ function App() {
           position.coords.latitude,
         ];
         const map = mapRef.current;
+        setStartingLocationMethod("current");
+        setLocationError(null);
+        setStartingLocation(location);
         if (!map) return;
+        selectedMarkerRef.current?.remove();
+        selectedMarkerRef.current = null;
         if (currentLocationMarkerRef.current) {
           currentLocationMarkerRef.current.setLngLat(location);
         } else {
@@ -74,12 +95,12 @@ function App() {
           essential: true,
         });
       },
-      (error) => {
-        console.error("Unable to determine current location.", error);
+      () => {
+        setLocationError("Unable to determine your current location. Enter it manually instead.");
       },
       { enableHighAccuracy: true, maximumAge: 30_000, timeout: 10_000 },
     );
-  }, []);
+  }, [setStartingLocation]);
 
   useEffect(() => {
     return () => {
@@ -131,9 +152,37 @@ function App() {
     selectedMarkerRef.current = marker;
     selectedLocationRef.current = lngLat;
     setSelectedLocation(lngLat);
+    setStartingLocationMethod("manual");
+    setManualLatitude(lngLat.lat.toFixed(5));
+    setManualLongitude(lngLat.lng.toFixed(5));
+    setLocationError(null);
   }, []);
+  const handleManualLocationSubmit = (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const latitude = Number(manualLatitude);
+    const longitude = Number(manualLongitude);
+    if (
+      !Number.isFinite(latitude) ||
+      !Number.isFinite(longitude) ||
+      latitude < -90 ||
+      latitude > 90 ||
+      longitude < -180 ||
+      longitude > 180
+    ) {
+      setLocationError("Enter a latitude from -90 to 90 and longitude from -180 to 180.");
+      return;
+    }
+    handleLocationSelect([longitude, latitude]);
+    setStartingLocationMethod("manual");
+    setLocationError(null);
+    mapRef.current?.flyTo({
+      center: [longitude, latitude],
+      zoom: Math.max(mapRef.current.getZoom(), 15),
+      essential: true,
+    });
+  };
   const handleMapClick = useCallback(() => {
-    if (!selectedLocationRef.current) return false;
+    if (!selectedMarkerRef.current) return false;
 
     selectedMarkerRef.current?.remove();
     selectedMarkerRef.current = null;
@@ -383,6 +432,72 @@ function App() {
           </div>
           {panelExpanded && (
             <div className="recent-destinations">
+              <div className="starting-location">
+                <p>Starting location</p>
+                <div className="starting-location-methods" role="group" aria-label="Starting location method">
+                  <button
+                    className={startingLocationMethod === "current" ? "selected" : ""}
+                    type="button"
+                    aria-pressed={startingLocationMethod === "current"}
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      setStartingLocationMethod("current");
+                      focusCurrentLocation();
+                    }}
+                  >
+                    Use current location
+                  </button>
+                  <button
+                    className={startingLocationMethod === "manual" ? "selected" : ""}
+                    type="button"
+                    aria-pressed={startingLocationMethod === "manual"}
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      setStartingLocationMethod("manual");
+                      setLocationError(null);
+                    }}
+                  >
+                    Enter manually
+                  </button>
+                </div>
+                {startingLocationMethod === "manual" && (
+                  <form className="manual-location-form" onSubmit={handleManualLocationSubmit}>
+                    <label>
+                      Latitude
+                      <input
+                        inputMode="decimal"
+                        type="number"
+                        min="-90"
+                        max="90"
+                        step="any"
+                        value={manualLatitude}
+                        onChange={(event) => setManualLatitude(event.target.value)}
+                        placeholder="40.7128"
+                      />
+                    </label>
+                    <label>
+                      Longitude
+                      <input
+                        inputMode="decimal"
+                        type="number"
+                        min="-180"
+                        max="180"
+                        step="any"
+                        value={manualLongitude}
+                        onChange={(event) => setManualLongitude(event.target.value)}
+                        placeholder="-74.0060"
+                      />
+                    </label>
+                    <button type="submit">Set starting location</button>
+                  </form>
+                )}
+                {locationError && (
+                  <p className="location-error" role="alert">
+                    {locationError}
+                  </p>
+                )}
+                <p className="location-help">You can also tap the map to choose a starting point.</p>
+              </div>
               <p>Recent destinations</p>
               {recentDestinations.map((destination) => (
                 <button type="button" key={destination}>
