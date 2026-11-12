@@ -39,6 +39,20 @@ within floating-point tolerance of the geometry length calculated by this
 module, but may differ slightly from a routing provider's road-network
 distance. Provider distance should remain authoritative for route totals.
 
+## Segment arrival timing
+
+`calculate_segment_arrival_times` assigns each ordered `RouteSegment` the
+timestamp at which the walker is expected to reach that segment's end. It
+derives a constant estimated walking speed from the route's provider distance
+and duration, then applies cumulative segment distance. `LEAVE_NOW` uses the
+current timezone-aware time, `DEPART_AT` uses the requested departure, and
+`ARRIVE_BY` subtracts the route duration to derive departure.
+
+Planning timestamps must include timezone information. The resulting
+`RouteTiming` preserves that timezone and can be passed to time-aware shade
+evaluation; no weather or other comfort variables are included in this
+calculation.
+
 ## Development
 
 Install the backend dependencies in a virtual environment and the frontend
