@@ -1,58 +1,12 @@
 import * as maplibregl from "maplibre-gl";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { Icon } from "./components/Icon";
+import { MapView } from "./components/MapView";
+import type { MapStyleName } from "./map/mapConfig";
 import "./App.css";
 import "maplibre-gl/dist/maplibre-gl.css";
 
 maplibregl.setWorkerUrl(new URL("maplibre-gl/dist/maplibre-gl-worker.mjs", import.meta.url).href);
-
-const BASE_MAP_STYLE = "https://tiles.openfreemap.org/styles/liberty";
-const INITIAL_MAP_VIEW: maplibregl.MapOptions["center"] = [-73.97, 40.78];
-const INITIAL_MAP_ZOOM = 12;
-const MAP_STYLES = {
-  default: BASE_MAP_STYLE,
-  satellite: {
-    version: 8,
-    sources: {
-      satellite: {
-        type: "raster",
-        tiles: [
-          "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
-        ],
-        tileSize: 256,
-        attribution: "© Esri",
-      },
-    },
-    layers: [{ id: "satellite", type: "raster", source: "satellite" }],
-  },
-  terrain: {
-    version: 8,
-    sources: {
-      terrain: {
-        type: "raster",
-        tiles: ["https://tile.opentopomap.org/{z}/{x}/{y}.png"],
-        tileSize: 256,
-        attribution: "© OpenTopoMap contributors",
-      },
-    },
-    layers: [{ id: "terrain", type: "raster", source: "terrain" }],
-  },
-} satisfies Record<string, maplibregl.StyleSpecification | string>;
-
-type MapStyleName = keyof typeof MAP_STYLES;
-
-type IconName =
-  | "arrow"
-  | "back"
-  | "chevron"
-  | "compass"
-  | "crosshair"
-  | "layers"
-  | "moon"
-  | "search"
-  | "shadow"
-  | "sun"
-  | "sunrise"
-  | "sunset";
 
 const recentDestinations = [
   "Home",
@@ -64,133 +18,6 @@ const recentDestinations = [
   "Sunset Beach",
   "Old Town",
 ];
-
-function Icon({ name }: { name: IconName }) {
-  const paths: Record<IconName, React.ReactNode> = {
-    arrow: <path d="m5 12 14-7-7 14-2-5-5-2Z" />,
-    back: <path d="m15 18-6-6 6-6M9 12h10" />,
-    chevron: <path d="m6 9 6 6 6-6" />,
-    compass: (
-      <>
-        <circle cx="12" cy="12" r="8.5" />
-        <path d="m15.8 8.2-2.2 5.6-5.6 2.2 2.2-5.6 5.6-2.2Z" />
-      </>
-    ),
-    crosshair: (
-      <>
-        <circle cx="12" cy="12" r="4" />
-        <path d="M12 2v3M12 19v3M2 12h3M19 12h3" />
-      </>
-    ),
-    layers: (
-      <>
-        <path d="m12 3 8 4-8 4-8-4 8-4Z" />
-        <path d="m4 12 8 4 8-4M4 17l8 4 8-4" />
-      </>
-    ),
-    moon: <path d="M20 15.2A8.5 8.5 0 0 1 8.8 4 8.5 8.5 0 1 0 20 15.2Z" />,
-    search: (
-      <>
-        <circle cx="10.8" cy="10.8" r="6.8" />
-        <path d="m16 16 4 4" />
-      </>
-    ),
-    shadow: (
-      <>
-        <path d="M5 18h14M7 15h10M9 12h6M11 9h2" />
-        <path d="m6 5 12 12" />
-      </>
-    ),
-    sun: (
-      <>
-        <circle cx="12" cy="12" r="3.5" />
-        <path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4" />
-      </>
-    ),
-    sunrise: (
-      <>
-        <path d="M3 18h18M6 15a6 6 0 0 1 12 0M12 3v3M5.6 7.6l2 2M18.4 7.6l-2 2" />
-      </>
-    ),
-    sunset: (
-      <>
-        <path d="M3 18h18M6 15a6 6 0 0 1 12 0M12 3v3M5.6 7.6l2 2M18.4 7.6l-2 2" />
-      </>
-    ),
-  };
-
-  return (
-    <svg aria-hidden="true" className="icon" viewBox="0 0 24 24" fill="none">
-      {paths[name]}
-    </svg>
-  );
-}
-
-function MapView({
-  mapRef,
-  onLocationSelect,
-  onMapClick,
-  onMapReady,
-  mapStyle,
-}: {
-  mapRef: React.RefObject<maplibregl.Map | null>;
-  onLocationSelect: (location: maplibregl.LngLatLike) => void;
-  onMapClick: () => boolean;
-  onMapReady: () => void;
-  mapStyle: MapStyleName;
-}) {
-  const containerRef = useRef<HTMLDivElement | null>(null);
-
-  useEffect(() => {
-    if (!containerRef.current) return;
-
-    const map = new maplibregl.Map({
-      container: containerRef.current,
-      style: BASE_MAP_STYLE,
-      center: INITIAL_MAP_VIEW,
-      zoom: INITIAL_MAP_ZOOM,
-      minZoom: 2,
-      maxZoom: 19,
-      dragPan: true,
-      scrollZoom: true,
-      touchZoomRotate: true,
-      attributionControl: { compact: true },
-    });
-
-    mapRef.current = map;
-    map.once("load", onMapReady);
-    const hideThreeDimensionalBuildings = () => {
-      for (const layer of map.getStyle().layers ?? []) {
-        if (layer.type === "fill-extrusion") {
-          map.setLayoutProperty(layer.id, "visibility", "none");
-        }
-      }
-    };
-    map.on("style.load", hideThreeDimensionalBuildings);
-    const handleMapClick = (event: maplibregl.MapMouseEvent) => {
-      if (onMapClick()) return;
-      onLocationSelect(event.lngLat);
-    };
-    map.on("click", handleMapClick);
-
-    const resizeObserver = new ResizeObserver(() => map.resize());
-    resizeObserver.observe(containerRef.current);
-
-    return () => {
-      map.off("click", handleMapClick);
-      map.off("style.load", hideThreeDimensionalBuildings);
-      resizeObserver.disconnect();
-      map.remove();
-      mapRef.current = null;
-    };
-  }, [mapRef, onLocationSelect, onMapClick, onMapReady]);
-
-  useEffect(() => {
-    mapRef.current?.setStyle(MAP_STYLES[mapStyle]);
-  }, [mapRef, mapStyle]);
-
-  return <div ref={containerRef} className="maplibre-map" aria-label="Interactive map" />;
-}
 
 function App() {
   const [shadowsEnabled, setShadowsEnabled] = useState(true);
