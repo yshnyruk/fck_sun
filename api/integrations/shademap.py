@@ -6,13 +6,14 @@ import httpx
 
 from api.core.config import Settings
 from api.schemas.shadows import ShadowRequest, ShadowResponse
+from api.services.segment_shadow_mapping import ShadowProviderError
 from api.services.shadow_processing import (
     ShadowResponseProcessingError,
     process_shademap_response,
 )
 
 
-class ShadeMapError(Exception):
+class ShadeMapError(ShadowProviderError):
     """Base error for failures communicating with ShadeMap."""
 
 

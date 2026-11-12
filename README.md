@@ -53,6 +53,16 @@ Planning timestamps must include timezone information. The resulting
 evaluation; no weather or other comfort variables are included in this
 calculation.
 
+## Segment shade mapping
+
+`map_shadows_to_segments` associates each ordered `RouteSegment` with its
+expected arrival time and a normalized `SegmentShadow`. Because the current
+ShadeMap boundary accepts viewports, the mapper requests a small viewport
+around each segment's representative midpoint and converts the arrival time
+to UTC. Requests are cached by midpoint and timestamp to avoid duplicate
+provider calls. Provider failures and empty responses affect only the
+corresponding segment and are represented as `unknown`.
+
 ## Development
 
 Install the backend dependencies in a virtual environment and the frontend
