@@ -21,6 +21,7 @@ def _http_error_code(status_code: int) -> str:
         status.HTTP_409_CONFLICT: "CONFLICT",
         status.HTTP_429_TOO_MANY_REQUESTS: "RATE_LIMITED",
         status.HTTP_502_BAD_GATEWAY: "BAD_GATEWAY",
+        status.HTTP_422_UNPROCESSABLE_ENTITY: "UNPROCESSABLE_ENTITY",
     }
     return codes.get(status_code, "HTTP_ERROR")
 

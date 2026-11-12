@@ -8,6 +8,7 @@ from api.core.config import Settings
 from api.integrations.graphhopper import (
     GraphHopperAdapter,
     GraphHopperConfigurationError,
+    GraphHopperNoRouteError,
     GraphHopperRequestError,
     GraphHopperResponseError,
 )
@@ -153,6 +154,24 @@ async def test_adapter_rejects_malformed_provider_response() -> None:
         adapter = GraphHopperAdapter(Settings(graphhopper_api_key="test-key"), client)
 
         with pytest.raises(GraphHopperResponseError, match="invalid route response"):
+            await adapter.get_routes(
+                Coordinate(latitude=40.7, longitude=-74.0),
+                Coordinate(latitude=40.71, longitude=-73.99),
+            )
+
+
+@pytest.mark.anyio
+async def test_adapter_reports_when_no_route_is_available() -> None:
+    async def handler(_: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json={"paths": []})
+
+    async with httpx.AsyncClient(
+        transport=httpx.MockTransport(handler),
+        base_url="https://graphhopper.test",
+    ) as client:
+        adapter = GraphHopperAdapter(Settings(graphhopper_api_key="test-key"), client)
+
+        with pytest.raises(GraphHopperNoRouteError, match="could not generate"):
             await adapter.get_routes(
                 Coordinate(latitude=40.7, longitude=-74.0),
                 Coordinate(latitude=40.71, longitude=-73.99),

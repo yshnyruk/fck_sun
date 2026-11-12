@@ -31,6 +31,10 @@ class GraphHopperResponseError(GraphHopperError):
     """Raised when GraphHopper returns an unusable response."""
 
 
+class GraphHopperNoRouteError(GraphHopperError):
+    """Raised when GraphHopper cannot generate a route for the request."""
+
+
 class GraphHopperGeometry(BaseModel):
     """The GeoJSON geometry returned by GraphHopper."""
 
@@ -128,7 +132,9 @@ class GraphHopperAdapter:
             ) from error
 
         if not graphhopper_response.paths:
-            raise GraphHopperResponseError("GraphHopper returned no route paths")
+            raise GraphHopperNoRouteError(
+                "GraphHopper could not generate a route for the requested coordinates"
+            )
 
         return [
             self._to_route(path, index)

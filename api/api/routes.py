@@ -1,7 +1,11 @@
 from typing import Annotated
 
 from api.core.config import get_settings
-from api.integrations.graphhopper import GraphHopperAdapter, GraphHopperError
+from api.integrations.graphhopper import (
+    GraphHopperAdapter,
+    GraphHopperError,
+    GraphHopperNoRouteError,
+)
 from api.integrations.graphhopper_geocoding import GraphHopperGeocodingError
 from api.schemas.routes import RouteRequest, RouteResponse
 from api.schemas.search import LocationSearchResponse
@@ -9,7 +13,7 @@ from api.services.location_search import (
     LocationSearchService,
     create_location_search_service,
 )
-from api.services.route_planning import RoutePlanningService
+from api.services.route_planning import RoutePlanningError, RoutePlanningService
 from fastapi import APIRouter, Depends, Query
 from starlette.exceptions import HTTPException
 
@@ -36,6 +40,11 @@ async def generate_routes(
 ) -> RouteResponse:
     try:
         return await service.plan(request)
+    except (GraphHopperNoRouteError, RoutePlanningError) as error:
+        raise HTTPException(
+            status_code=422,
+            detail="No pedestrian route could be generated for these coordinates.",
+        ) from error
     except GraphHopperError as error:
         raise HTTPException(
             status_code=502,
