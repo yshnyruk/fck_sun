@@ -41,10 +41,7 @@ class RoutePlanningService:
         if not provider_routes:
             raise RoutePlanningError("No pedestrian route was returned by the routing provider")
         routes = [_route_without_unsupported_shade(route) for route in provider_routes]
-        coverages = {
-            route.id: _coverage_for_route(route)
-            for route in routes
-        }
+        coverages = {route.id: _coverage_for_route(route) for route in routes}
         recommended_route, alternatives = select_recommended_route(
             routes,
             coverages,

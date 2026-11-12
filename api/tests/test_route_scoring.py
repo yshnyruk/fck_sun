@@ -40,10 +40,7 @@ def coverage(
 
 
 def test_each_preference_has_distinct_shade_importance() -> None:
-    shade_weights = [
-        DEFAULT_SCORING_WEIGHTS[preference].shade
-        for preference in ShadePreference
-    ]
+    shade_weights = [DEFAULT_SCORING_WEIGHTS[preference].shade for preference in ShadePreference]
 
     assert shade_weights == [0.70, 0.55, 0.40, 0.20, 0.05]
 
