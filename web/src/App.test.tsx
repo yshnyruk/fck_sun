@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { SHADE_PREFERENCES } from "./shadePreferences";
+import { toLocalDateTimeInput, toUtcISOString } from "./planningTime";
 
 describe("FckSun frontend", () => {
   it("provides a browser DOM environment", () => {
@@ -19,5 +20,14 @@ describe("FckSun frontend", () => {
       "less",
       "no_shadow",
     ]);
+  });
+
+  it("converts a selected local departure time to an ISO timestamp", () => {
+    const localDeparture = new Date(2030, 4, 10, 14, 30);
+
+    expect(toUtcISOString(toLocalDateTimeInput(localDeparture))).toBe(
+      localDeparture.toISOString(),
+    );
+    expect(toUtcISOString("")).toBeNull();
   });
 });

@@ -66,8 +66,8 @@ class RouteRequest(BaseModel):
                 raise ValueError("arrival_time is required when planning_mode is arrive_by")
             if self.departure_time is not None:
                 raise ValueError("departure_time is not allowed when planning_mode is arrive_by")
-        elif self.departure_time is not None or self.arrival_time is not None:
-            raise ValueError("planning time is not allowed when planning_mode is leave_now")
+        elif self.arrival_time is not None:
+            raise ValueError("arrival_time is not allowed when planning_mode is leave_now")
 
         planned_time = self.departure_time or self.arrival_time
         if planned_time is not None and planned_time.tzinfo is None:

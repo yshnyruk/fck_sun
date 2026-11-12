@@ -5,6 +5,7 @@ import { MapView } from "./components/MapView";
 import { config } from "./config";
 import type { MapStyleName } from "./map/mapConfig";
 import { SHADE_PREFERENCES, type ShadePreference } from "./shadePreferences";
+import { toLocalDateTimeInput, toUtcISOString } from "./planningTime";
 import "./App.css";
 import "maplibre-gl/dist/maplibre-gl.css";
 
@@ -29,6 +30,12 @@ type DestinationSearchResult = {
     longitude: number;
   };
 };
+
+const PLANNING_MODES = [
+  { value: "leave_now", label: "Leave now" },
+  { value: "depart_at", label: "Depart at" },
+] as const;
+type PlanningMode = (typeof PLANNING_MODES)[number]["value"];
 
 function isDestinationSearchResult(value: unknown): value is DestinationSearchResult {
   if (!value || typeof value !== "object") return false;
@@ -66,6 +73,10 @@ function App() {
   const selectedMarkerRef = useRef<maplibregl.Marker | null>(null);
   const [shadePreference, setShadePreference] = useState<ShadePreference>("full");
   const [navigationStarted, setNavigationStarted] = useState(false);
+  const [routeRequestState, setRouteRequestState] = useState<"idle" | "loading" | "error">(
+    "idle",
+  );
+  const [routeRequestError, setRouteRequestError] = useState<string | null>(null);
   const [mapStyle, setMapStyle] = useState<MapStyleName>("default");
   const [mapStyleOpen, setMapStyleOpen] = useState(false);
   const [destinationQuery, setDestinationQuery] = useState("");
@@ -78,6 +89,8 @@ function App() {
   const [selectedDestination, setSelectedDestination] = useState<DestinationSearchResult | null>(
     null,
   );
+  const [planningMode, setPlanningMode] = useState<PlanningMode>("leave_now");
+  const [departureDateTime, setDepartureDateTime] = useState("");
   const selectedDestinationRef = useRef<DestinationSearchResult | null>(null);
   const setStartingLocation = useCallback((location: maplibregl.LngLatLike) => {
     const lngLat = maplibregl.LngLat.convert(location);
@@ -203,6 +216,51 @@ function App() {
       setPanelHeight(Math.round(window.innerHeight * 0.4));
       setDragDistance(0);
     }, 260);
+  };
+  const startNavigation = async () => {
+    if (!selectedDestination || !selectedLocation) {
+      setRouteRequestError("Your current location is not available yet.");
+      setRouteRequestState("error");
+      return;
+    }
+
+    const departureTime = planningMode === "depart_at" ? toUtcISOString(departureDateTime) : null;
+    if (planningMode === "depart_at" && (!departureTime || new Date(departureTime) <= new Date())) {
+      setRouteRequestError("Choose a future departure date and time.");
+      setRouteRequestState("error");
+      return;
+    }
+
+    setRouteRequestState("loading");
+    setRouteRequestError(null);
+    try {
+      const response = await fetch(`${config.apiBaseUrl}/routes`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          origin: {
+            latitude: selectedLocation.lat,
+            longitude: selectedLocation.lng,
+          },
+          destination: selectedDestination.coordinate,
+          planning_mode: planningMode,
+          shade_preference: shadePreference,
+          ...(planningMode === "depart_at"
+            ? { departure_time: departureTime }
+            : { departure_time: new Date().toISOString() }),
+        }),
+      });
+      if (!response.ok) {
+        throw new Error(`Route planning failed with status ${response.status}`);
+      }
+      await response.json();
+      setRouteRequestState("idle");
+      setNavigationStarted(true);
+    } catch (error) {
+      console.error("Unable to start navigation.", error);
+      setRouteRequestState("error");
+      setRouteRequestError("Unable to plan this route. Try again.");
+    }
   };
 
   const formattedTime = `${String(Math.floor(time)).padStart(2, "0")}:${time % 1 ? "30" : "00"}`;
@@ -567,16 +625,62 @@ function App() {
                   </button>
                 ))}
               </div>
+              <div className="planning-mode">
+                <p>Planning mode</p>
+                <div className="planning-mode-options" role="group" aria-label="Planning mode">
+                  {PLANNING_MODES.map((mode) => (
+                    <button
+                      key={mode.value}
+                      className={planningMode === mode.value ? "selected" : ""}
+                      type="button"
+                      aria-pressed={planningMode === mode.value}
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        setPlanningMode(mode.value);
+                      }}
+                    >
+                      {mode.label}
+                    </button>
+                  ))}
+                </div>
+                {planningMode === "depart_at" && (
+                  <label className="departure-time-field">
+                    <span>Departure date and time</span>
+                    <input
+                      aria-label="Departure date and time"
+                      type="datetime-local"
+                      required
+                      min={toLocalDateTimeInput(new Date(Date.now() + 60_000))}
+                      value={departureDateTime}
+                      onChange={(event) => {
+                        setDepartureDateTime(event.target.value);
+                        setRouteRequestError(null);
+                        if (routeRequestState === "error") setRouteRequestState("idle");
+                      }}
+                    />
+                  </label>
+                )}
+              </div>
               <button
                 className="start-navigation"
                 type="button"
+                disabled={routeRequestState === "loading"}
                 onClick={(event) => {
                   event.stopPropagation();
-                  setNavigationStarted(true);
+                  void startNavigation();
                 }}
               >
-                {navigationStarted ? "Navigation started" : "Start navigation"}
+                {routeRequestState === "loading"
+                  ? "Planning route..."
+                  : navigationStarted
+                    ? "Navigation started"
+                    : "Start navigation"}
               </button>
+              {routeRequestError && (
+                <p className="location-error" role="alert">
+                  {routeRequestError}
+                </p>
+              )}
             </div>
           )}
         </div>

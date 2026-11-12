@@ -728,6 +728,61 @@
   box-shadow: 0 3px 8px rgba(36, 122, 203, 0.22);
 }
 
+.planning-mode {
+  padding-top: 14px;
+}
+
+.planning-mode > p {
+  margin: 0 0 7px 4px;
+  color: #7691aa;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.planning-mode-options {
+  display: grid;
+  grid-template-columns: 1fr;
+}
+
+.planning-mode-options button {
+  min-height: 38px;
+  padding: 7px 10px;
+  border: 1px solid #c8dcec;
+  border-radius: 9px;
+  color: #2775b8;
+  background: #f7fbff;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.planning-mode-options button.selected {
+  border-color: #247acb;
+  color: white;
+  background: #247acb;
+}
+
+.departure-time-field {
+  display: grid;
+  gap: 6px;
+  margin-top: 10px;
+  color: #52718e;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.departure-time-field input {
+  width: 100%;
+  min-height: 42px;
+  padding: 8px 10px;
+  border: 1px solid #c8dcec;
+  border-radius: 9px;
+  color: #24577f;
+  background: #f7fbff;
+  font: inherit;
+}
+
 .route-planner-start {
   display: flex;
   align-items: center;
@@ -784,6 +839,11 @@
 
 .start-navigation:active {
   background: #1d67ae;
+}
+
+.start-navigation:disabled {
+  cursor: wait;
+  opacity: 0.65;
 }
 
 .recent-destinations p {

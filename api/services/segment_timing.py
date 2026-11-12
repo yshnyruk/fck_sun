@@ -65,7 +65,7 @@ def _resolve_route_times(
     now: datetime | None,
 ) -> tuple[datetime, datetime]:
     if request.planning_mode is PlanningMode.LEAVE_NOW:
-        departure_time = now or datetime.now(UTC)
+        departure_time = request.departure_time or now or datetime.now(UTC)
         if departure_time.tzinfo is None:
             raise SegmentTimingError("Current time must include a timezone")
         departure_time = departure_time.astimezone(departure_time.tzinfo)

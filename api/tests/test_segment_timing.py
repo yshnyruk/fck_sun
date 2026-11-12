@@ -75,6 +75,19 @@ def test_leave_now_uses_injected_current_time() -> None:
     ]
 
 
+def test_leave_now_uses_request_departure_time_when_provided() -> None:
+    departure = datetime(2026, 6, 1, 13, 30, tzinfo=UTC)
+
+    timing = calculate_segment_arrival_times(
+        route(),
+        segments(),
+        request(PlanningMode.LEAVE_NOW, departure_time=departure),
+        now=datetime(2026, 6, 1, 12, 0, tzinfo=UTC),
+    )
+
+    assert timing.departure_time == departure
+
+
 def test_depart_at_uses_selected_timestamp_and_preserves_timezone() -> None:
     departure = datetime(2026, 6, 1, 14, 0, tzinfo=UTC)
 
