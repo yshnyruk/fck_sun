@@ -5,6 +5,7 @@ export type IconName =
   | "back"
   | "chevron"
   | "compass"
+  | "close"
   | "crosshair"
   | "layers"
   | "moon"
@@ -25,6 +26,7 @@ export function Icon({ name }: { name: IconName }) {
         <path d="m15.8 8.2-2.2 5.6-5.6 2.2 2.2-5.6 5.6-2.2Z" />
       </>
     ),
+    close: <path d="m6 6 12 12M18 6 6 18" />,
     crosshair: (
       <>
         <circle cx="12" cy="12" r="4" />

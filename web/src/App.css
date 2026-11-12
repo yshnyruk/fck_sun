@@ -649,6 +649,143 @@
   background: #247acb;
 }
 
+.route-planner {
+  padding-top: 16px;
+  color: #244665;
+}
+
+.route-planner-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 0 4px 14px;
+}
+
+.route-planner-eyebrow {
+  margin: 0 0 3px;
+  color: #7691aa;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.route-planner h2 {
+  margin: 0;
+  color: #18395d;
+  font-size: 21px;
+  line-height: 1.15;
+}
+
+.route-planner-label {
+  margin: 4px 0 0;
+  color: #7691aa;
+  font-size: 12px;
+}
+
+.route-planner-close {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  color: #5e87ac;
+  background: #edf5fc;
+}
+
+.route-planner-close .icon {
+  width: 17px;
+  height: 17px;
+}
+
+.route-planner-tabs {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 5px;
+  padding: 4px;
+  border-radius: 13px;
+  background: #edf5fc;
+}
+
+.route-planner-tabs button {
+  min-height: 38px;
+  padding: 6px 3px;
+  border: 0;
+  border-radius: 9px;
+  color: #2775b8;
+  background: transparent;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.route-planner-tabs button.selected {
+  color: white;
+  background: #247acb;
+  box-shadow: 0 3px 8px rgba(36, 122, 203, 0.22);
+}
+
+.route-planner-start {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 16px 4px;
+  border-bottom: 1px solid #e5eef6;
+}
+
+.route-planner-start > .icon {
+  flex: none;
+  width: 21px;
+  height: 21px;
+  color: #247acb;
+}
+
+.route-planner-start div {
+  display: grid;
+  flex: 1;
+  gap: 2px;
+}
+
+.route-planner-start span {
+  color: #7691aa;
+  font-size: 11px;
+}
+
+.route-planner-start strong {
+  color: #244665;
+  font-size: 13px;
+}
+
+.route-planner-start button {
+  padding: 6px 0 6px 6px;
+  border: 0;
+  color: #247acb;
+  background: transparent;
+  font-size: 11px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.start-navigation {
+  width: 100%;
+  min-height: 44px;
+  margin-top: 14px;
+  border: 0;
+  border-radius: 11px;
+  color: white;
+  background: #247acb;
+  box-shadow: 0 5px 12px rgba(36, 122, 203, 0.24);
+  font-size: 14px;
+  font-weight: 800;
+}
+
+.start-navigation:active {
+  background: #1d67ae;
+}
+
 .recent-destinations p {
   margin: 0 0 7px 4px;
   color: #7691aa;

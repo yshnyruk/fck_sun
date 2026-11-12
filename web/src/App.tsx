@@ -45,9 +45,7 @@ function isDestinationSearchResult(value: unknown): value is DestinationSearchRe
 }
 
 function App() {
-  type StartingLocationMethod = "current" | "manual";
-
-  const [shadowsEnabled, setShadowsEnabled] = useState(true);
+  const [shadowsEnabled, setShadowsEnabled] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
   const [isClosingSearch, setIsClosingSearch] = useState(false);
   const [panelExpanded, setPanelExpanded] = useState(false);
@@ -66,12 +64,8 @@ function App() {
   const [selectedLocation, setSelectedLocation] = useState<maplibregl.LngLat | null>(null);
   const selectedLocationRef = useRef<maplibregl.LngLat | null>(null);
   const selectedMarkerRef = useRef<maplibregl.Marker | null>(null);
-  const [startingLocationMethod, setStartingLocationMethod] =
-    useState<StartingLocationMethod>("current");
-  const [shadePreference, setShadePreference] = useState<ShadePreference>("medium");
-  const [manualLatitude, setManualLatitude] = useState("");
-  const [manualLongitude, setManualLongitude] = useState("");
-  const [locationError, setLocationError] = useState<string | null>(null);
+  const [shadePreference, setShadePreference] = useState<ShadePreference>("full");
+  const [navigationStarted, setNavigationStarted] = useState(false);
   const [mapStyle, setMapStyle] = useState<MapStyleName>("default");
   const [mapStyleOpen, setMapStyleOpen] = useState(false);
   const [destinationQuery, setDestinationQuery] = useState("");
@@ -84,6 +78,7 @@ function App() {
   const [selectedDestination, setSelectedDestination] = useState<DestinationSearchResult | null>(
     null,
   );
+  const selectedDestinationRef = useRef<DestinationSearchResult | null>(null);
   const setStartingLocation = useCallback((location: maplibregl.LngLatLike) => {
     const lngLat = maplibregl.LngLat.convert(location);
     if (!Number.isFinite(lngLat.lng) || !Number.isFinite(lngLat.lat)) return;
@@ -91,10 +86,7 @@ function App() {
     selectedLocationRef.current = lngLat;
   }, []);
   const focusCurrentLocation = useCallback(() => {
-    if (!navigator.geolocation) {
-      setLocationError("Current location is not available in this browser.");
-      return;
-    }
+    if (!navigator.geolocation) return;
 
     navigator.geolocation.getCurrentPosition(
       (position) => {
@@ -103,8 +95,6 @@ function App() {
           position.coords.latitude,
         ];
         const map = mapRef.current;
-        setStartingLocationMethod("current");
-        setLocationError(null);
         setStartingLocation(location);
         if (!map) return;
         selectedMarkerRef.current?.remove();
@@ -131,8 +121,8 @@ function App() {
           essential: true,
         });
       },
-      () => {
-        setLocationError("Unable to determine your current location. Enter it manually instead.");
+      (error) => {
+        console.error("Unable to determine the user's current location.", error);
       },
       { enableHighAccuracy: true, maximumAge: 30_000, timeout: 10_000 },
     );
@@ -190,18 +180,29 @@ function App() {
 
   const handleDestinationQueryChange = (value: string) => {
     setDestinationQuery(value);
+    setNavigationStarted(false);
     setDestinationSuggestions([]);
     setDestinationSearchState("idle");
     if (selectedDestination && value !== selectedDestination.name) {
       setSelectedDestination(null);
+      selectedDestinationRef.current = null;
     }
   };
   const handleDestinationSelect = (destination: DestinationSearchResult) => {
     setDestinationQuery(destination.name);
     setSelectedDestination(destination);
+    selectedDestinationRef.current = destination;
+    setNavigationStarted(false);
     setDestinationSuggestions([]);
     setDestinationSearchState("idle");
-    closeSearchScreen();
+    setIsClosingSearch(true);
+    window.setTimeout(() => {
+      setSearchOpen(false);
+      setIsClosingSearch(false);
+      setPanelExpanded(true);
+      setPanelHeight(Math.round(window.innerHeight * 0.4));
+      setDragDistance(0);
+    }, 260);
   };
 
   const formattedTime = `${String(Math.floor(time)).padStart(2, "0")}:${time % 1 ? "30" : "00"}`;
@@ -247,35 +248,7 @@ function App() {
     selectedMarkerRef.current = marker;
     selectedLocationRef.current = lngLat;
     setSelectedLocation(lngLat);
-    setStartingLocationMethod("manual");
-    setManualLatitude(lngLat.lat.toFixed(5));
-    setManualLongitude(lngLat.lng.toFixed(5));
-    setLocationError(null);
   }, []);
-  const handleManualLocationSubmit = (event: React.FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    const latitude = Number(manualLatitude);
-    const longitude = Number(manualLongitude);
-    if (
-      !Number.isFinite(latitude) ||
-      !Number.isFinite(longitude) ||
-      latitude < -90 ||
-      latitude > 90 ||
-      longitude < -180 ||
-      longitude > 180
-    ) {
-      setLocationError("Enter a latitude from -90 to 90 and longitude from -180 to 180.");
-      return;
-    }
-    handleLocationSelect([longitude, latitude]);
-    setStartingLocationMethod("manual");
-    setLocationError(null);
-    mapRef.current?.flyTo({
-      center: [longitude, latitude],
-      zoom: Math.max(mapRef.current.getZoom(), 15),
-      essential: true,
-    });
-  };
   const handleMapClick = useCallback(() => {
     if (!selectedMarkerRef.current) return false;
 
@@ -284,6 +257,18 @@ function App() {
     selectedLocationRef.current = null;
     setSelectedLocation(null);
     return true;
+  }, []);
+  const resetExpandedMapControls = useCallback(() => {
+    setMapStyleOpen(false);
+    setIsClosingSearch(false);
+    setSearchOpen(false);
+    if (!selectedDestinationRef.current) {
+      setPanelExpanded(false);
+      setPanelHeight(collapsedHeight);
+    }
+    setDragDistance(0);
+    setIsDragging(false);
+    dragStart.current = null;
   }, []);
   const openSearchScreen = () => {
     setIsClosingSearch(false);
@@ -373,6 +358,7 @@ function App() {
           mapRef={mapRef}
           onLocationSelect={handleLocationSelect}
           onMapClick={handleMapClick}
+          onMapDragStart={resetExpandedMapControls}
           onMapReady={focusCurrentLocation}
           mapStyle={mapStyle}
         />
@@ -505,125 +491,32 @@ function App() {
           >
             <span />
           </button>
-          <div className="search-row mx-auto max-w-[600px]">
-            <Icon name="search" />
-            <input
-              aria-label="Search for a destination"
-              placeholder="Where to?"
-              value={destinationQuery}
-              onChange={(event) => handleDestinationQueryChange(event.target.value)}
-              onFocus={openSearchScreen}
-            />
-            <button
-              className="search-arrow"
-              type="button"
-              aria-label="Expand search"
-              onClick={(event) => {
-                event.stopPropagation();
-                setPanelHeight(getSnapHeights()[1]);
-                openSearchScreen();
-              }}
-            >
-              <Icon name="chevron" />
-            </button>
-          </div>
-          {panelExpanded && (
+          {!selectedDestination && (
+            <div className="search-row mx-auto max-w-[600px]">
+              <Icon name="search" />
+              <input
+                aria-label="Search for a destination"
+                placeholder="Where to?"
+                value={destinationQuery}
+                onChange={(event) => handleDestinationQueryChange(event.target.value)}
+                onFocus={openSearchScreen}
+              />
+              <button
+                className="search-arrow"
+                type="button"
+                aria-label="Expand search"
+                onClick={(event) => {
+                  event.stopPropagation();
+                  setPanelHeight(getSnapHeights()[1]);
+                  openSearchScreen();
+                }}
+              >
+                <Icon name="chevron" />
+              </button>
+            </div>
+          )}
+          {panelExpanded && !selectedDestination && (
             <div className="recent-destinations">
-              <div className="starting-location">
-                <p>Starting location</p>
-                <div
-                  className="starting-location-methods"
-                  role="group"
-                  aria-label="Starting location method"
-                >
-                  <button
-                    className={startingLocationMethod === "current" ? "selected" : ""}
-                    type="button"
-                    aria-pressed={startingLocationMethod === "current"}
-                    onClick={(event) => {
-                      event.stopPropagation();
-                      setStartingLocationMethod("current");
-                      focusCurrentLocation();
-                    }}
-                  >
-                    Use current location
-                  </button>
-                  <button
-                    className={startingLocationMethod === "manual" ? "selected" : ""}
-                    type="button"
-                    aria-pressed={startingLocationMethod === "manual"}
-                    onClick={(event) => {
-                      event.stopPropagation();
-                      setStartingLocationMethod("manual");
-                      setLocationError(null);
-                    }}
-                  >
-                    Enter manually
-                  </button>
-                </div>
-                {startingLocationMethod === "manual" && (
-                  <form className="manual-location-form" onSubmit={handleManualLocationSubmit}>
-                    <label>
-                      Latitude
-                      <input
-                        inputMode="decimal"
-                        type="number"
-                        min="-90"
-                        max="90"
-                        step="any"
-                        value={manualLatitude}
-                        onChange={(event) => setManualLatitude(event.target.value)}
-                        placeholder="40.7128"
-                      />
-                    </label>
-                    <label>
-                      Longitude
-                      <input
-                        inputMode="decimal"
-                        type="number"
-                        min="-180"
-                        max="180"
-                        step="any"
-                        value={manualLongitude}
-                        onChange={(event) => setManualLongitude(event.target.value)}
-                        placeholder="-74.0060"
-                      />
-                    </label>
-                    <button type="submit">Set starting location</button>
-                  </form>
-                )}
-                {locationError && (
-                  <p className="location-error" role="alert">
-                    {locationError}
-                  </p>
-                )}
-                <p className="location-help">
-                  You can also tap the map to choose a starting point.
-                </p>
-              </div>
-              <div className="shade-preference">
-                <p>Shade preference</p>
-                <div
-                  className="shade-preference-options"
-                  role="group"
-                  aria-label="Shade preference"
-                >
-                  {SHADE_PREFERENCES.map((preference) => (
-                    <button
-                      key={preference.value}
-                      className={shadePreference === preference.value ? "selected" : ""}
-                      type="button"
-                      aria-pressed={shadePreference === preference.value}
-                      onClick={(event) => {
-                        event.stopPropagation();
-                        setShadePreference(preference.value);
-                      }}
-                    >
-                      {preference.label}
-                    </button>
-                  ))}
-                </div>
-              </div>
               <p>Recent destinations</p>
               {recentDestinations.map((destination) => (
                 <button type="button" key={destination}>
@@ -633,6 +526,57 @@ function App() {
                   {destination}
                 </button>
               ))}
+            </div>
+          )}
+          {selectedDestination && (
+            <div className="route-planner">
+              <div className="route-planner-header">
+                <div>
+                  <h2>{selectedDestination.name}</h2>
+                  <p className="route-planner-label">{selectedDestination.label}</p>
+                </div>
+                <button
+                  className="route-planner-close"
+                  type="button"
+                  aria-label="Choose a different destination"
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    setSelectedDestination(null);
+                    selectedDestinationRef.current = null;
+                    setDestinationQuery("");
+                    setPanelHeight(getSnapHeights()[1]);
+                  }}
+                >
+                  <Icon name="close" />
+                </button>
+              </div>
+              <div className="route-planner-tabs" role="tablist" aria-label="Shade preference">
+                {SHADE_PREFERENCES.map((preference) => (
+                  <button
+                    key={preference.value}
+                    className={shadePreference === preference.value ? "selected" : ""}
+                    type="button"
+                    role="tab"
+                    aria-selected={shadePreference === preference.value}
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      setShadePreference(preference.value);
+                    }}
+                  >
+                    {preference.label}
+                  </button>
+                ))}
+              </div>
+              <button
+                className="start-navigation"
+                type="button"
+                onClick={(event) => {
+                  event.stopPropagation();
+                  setNavigationStarted(true);
+                }}
+              >
+                {navigationStarted ? "Navigation started" : "Start navigation"}
+              </button>
             </div>
           )}
         </div>
