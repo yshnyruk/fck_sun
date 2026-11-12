@@ -1,5 +1,5 @@
 import * as maplibregl from "maplibre-gl";
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Icon } from "./components/Icon";
 import { LocationSearchOverlay } from "./components/LocationSearchOverlay";
 import { RoutePlannerPanel, type DestinationSearchResult } from "./components/RoutePlannerPanel";
@@ -70,6 +70,7 @@ function App() {
   const [routeRequestState, setRouteRequestState] = useState<"idle" | "loading" | "error">("idle");
   const [routeRequestError, setRouteRequestError] = useState<string | null>(null);
   const [plannedRoutes, setPlannedRoutes] = useState<RoutePlanningResponse | null>(null);
+  const [selectedRouteId, setSelectedRouteId] = useState<string | null>(null);
   const [mapStyle, setMapStyle] = useState<MapStyleName>("default");
   const [mapStyleOpen, setMapStyleOpen] = useState(false);
   const [destinationQuery, setDestinationQuery] = useState("");
@@ -132,54 +133,57 @@ function App() {
     },
     [],
   );
-  const focusCurrentLocation = useCallback((focusMap = true) => {
-    if (!navigator.geolocation) {
-      setRouteRequestError("Location access is unavailable. Choose a starting point on the map.");
-      setRouteRequestState("error");
-      return;
-    }
-
-    navigator.geolocation.getCurrentPosition(
-      (position) => {
-        const location: maplibregl.LngLatLike = [
-          position.coords.longitude,
-          position.coords.latitude,
-        ];
-        const map = mapRef.current;
-        setStartingLocation(location);
-        if (!map) return;
-        if (currentLocationMarkerRef.current) {
-          currentLocationMarkerRef.current.setLngLat(location);
-        } else {
-          const markerElement = document.createElement("div");
-          markerElement.className = "current-location-marker";
-          markerElement.setAttribute("aria-label", "Your current location");
-          currentLocationMarkerRef.current = new maplibregl.Marker({
-            element: markerElement,
-            anchor: "center",
-          })
-            .setLngLat(location)
-            .addTo(map);
-          currentLocationMarkerRef.current.getElement().addEventListener("click", (event) => {
-            event.stopPropagation();
-          });
-        }
-        if (focusMap) {
-          map.flyTo({
-            center: location,
-            zoom: Math.max(map.getZoom(), 15),
-            essential: true,
-          });
-        }
-      },
-      (error) => {
-        console.error("Unable to determine the user's current location.", error);
-        setRouteRequestError("Could not get your location. Choose a starting point on the map.");
+  const focusCurrentLocation = useCallback(
+    (focusMap = true) => {
+      if (!navigator.geolocation) {
+        setRouteRequestError("Location access is unavailable. Choose a starting point on the map.");
         setRouteRequestState("error");
-      },
-      { enableHighAccuracy: true, maximumAge: 30_000, timeout: 10_000 },
-    );
-  }, [setStartingLocation]);
+        return;
+      }
+
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          const location: maplibregl.LngLatLike = [
+            position.coords.longitude,
+            position.coords.latitude,
+          ];
+          const map = mapRef.current;
+          setStartingLocation(location);
+          if (!map) return;
+          if (currentLocationMarkerRef.current) {
+            currentLocationMarkerRef.current.setLngLat(location);
+          } else {
+            const markerElement = document.createElement("div");
+            markerElement.className = "current-location-marker";
+            markerElement.setAttribute("aria-label", "Your current location");
+            currentLocationMarkerRef.current = new maplibregl.Marker({
+              element: markerElement,
+              anchor: "center",
+            })
+              .setLngLat(location)
+              .addTo(map);
+            currentLocationMarkerRef.current.getElement().addEventListener("click", (event) => {
+              event.stopPropagation();
+            });
+          }
+          if (focusMap) {
+            map.flyTo({
+              center: location,
+              zoom: Math.max(map.getZoom(), 15),
+              essential: true,
+            });
+          }
+        },
+        (error) => {
+          console.error("Unable to determine the user's current location.", error);
+          setRouteRequestError("Could not get your location. Choose a starting point on the map.");
+          setRouteRequestState("error");
+        },
+        { enableHighAccuracy: true, maximumAge: 30_000, timeout: 10_000 },
+      );
+    },
+    [setStartingLocation],
+  );
 
   const showDestinationOnMap = useCallback(
     (destination: DestinationSearchResult, onMarkerClick?: () => void) => {
@@ -391,6 +395,7 @@ function App() {
       const result = parseRoutePlanningResponse(await response.json());
       if (!result) throw new Error("Route planning returned an invalid response");
       setPlannedRoutes(result);
+      setSelectedRouteId(result.recommended_route.id);
       setRouteRequestState("idle");
     } catch (error) {
       if (controller.signal.aborted) return;
@@ -430,6 +435,10 @@ function App() {
     }
     void planRoute();
   };
+  const routeOptions = useMemo(
+    () => (plannedRoutes ? [plannedRoutes.recommended_route, ...plannedRoutes.alternatives] : []),
+    [plannedRoutes],
+  );
 
   const formattedTime = `${String(Math.floor(time)).padStart(2, "0")}:${time % 1 ? "30" : "00"}`;
   const planningModeLabel =
@@ -655,7 +664,8 @@ function App() {
           onMapDragStart={resetExpandedMapControls}
           onMapReady={focusCurrentLocation}
           mapStyle={mapStyle}
-          route={plannedRoutes?.recommended_route ?? null}
+          routes={routeOptions}
+          selectedRouteId={selectedRouteId}
         />
         {selectedDestination && (
           <section className="route-points-card" aria-label="Route locations">
@@ -907,6 +917,11 @@ function App() {
               requestError={routeRequestError}
               navigationStarted={navigationStarted}
               routes={plannedRoutes}
+              selectedRouteId={selectedRouteId}
+              onSelectRoute={(route) => {
+                setSelectedRouteId(route.id);
+                setNavigationStarted(false);
+              }}
               onStartNavigation={() => void startNavigation()}
               onCloseDestination={() => {
                 destinationMarkerRef.current?.remove();

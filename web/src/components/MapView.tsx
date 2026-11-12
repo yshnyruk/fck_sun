@@ -11,7 +11,8 @@ type MapViewProps = {
   onMapDragStart: () => void;
   onMapReady: () => void;
   mapStyle: MapStyleName;
-  route: PlannedRoute | null;
+  routes: PlannedRoute[];
+  selectedRouteId: string | null;
 };
 
 export function MapView({
@@ -21,7 +22,8 @@ export function MapView({
   onMapDragStart,
   onMapReady,
   mapStyle,
-  route,
+  routes,
+  selectedRouteId,
 }: MapViewProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const longPressTimerRef = useRef<ReturnType<typeof window.setTimeout> | null>(null);
@@ -113,30 +115,65 @@ export function MapView({
     const map = mapRef.current;
     if (!map) return;
 
-    const renderRoute = () => {
-      if (map.getLayer("planned-route-line")) map.removeLayer("planned-route-line");
-      if (map.getLayer("planned-route-casing")) map.removeLayer("planned-route-casing");
-      if (map.getSource("planned-route")) map.removeSource("planned-route");
-      if (!route) return;
-      map.addSource("planned-route", {
+    const renderRoutes = () => {
+      for (const layerId of [
+        "planned-route-selected-line",
+        "planned-route-selected-casing",
+        "planned-route-alternative-line",
+        "planned-route-alternative-casing",
+      ]) {
+        if (map.getLayer(layerId)) map.removeLayer(layerId);
+      }
+      if (map.getSource("planned-routes")) map.removeSource("planned-routes");
+      if (routes.length === 0 || !selectedRouteId) return;
+
+      map.addSource("planned-routes", {
         type: "geojson",
-        data: { type: "Feature", properties: {}, geometry: route.geometry },
+        data: {
+          type: "FeatureCollection",
+          features: routes.map((route) => ({
+            type: "Feature",
+            properties: { route_id: route.id },
+            geometry: route.geometry,
+          })),
+        },
       });
       map.addLayer({
-        id: "planned-route-casing",
+        id: "planned-route-alternative-casing",
         type: "line",
-        source: "planned-route",
+        source: "planned-routes",
+        filter: ["!=", ["get", "route_id"], selectedRouteId],
+        layout: { "line-cap": "round", "line-join": "round" },
+        paint: { "line-color": "#ffffff", "line-width": 8, "line-opacity": 0.88 },
+      });
+      map.addLayer({
+        id: "planned-route-alternative-line",
+        type: "line",
+        source: "planned-routes",
+        filter: ["!=", ["get", "route_id"], selectedRouteId],
+        layout: { "line-cap": "round", "line-join": "round" },
+        paint: { "line-color": "#70879b", "line-width": 4, "line-opacity": 0.88 },
+      });
+      map.addLayer({
+        id: "planned-route-selected-casing",
+        type: "line",
+        source: "planned-routes",
+        filter: ["==", ["get", "route_id"], selectedRouteId],
         layout: { "line-cap": "round", "line-join": "round" },
         paint: { "line-color": "#ffffff", "line-width": 11, "line-opacity": 0.96 },
       });
       map.addLayer({
-        id: "planned-route-line",
+        id: "planned-route-selected-line",
         type: "line",
-        source: "planned-route",
+        source: "planned-routes",
+        filter: ["==", ["get", "route_id"], selectedRouteId],
         layout: { "line-cap": "round", "line-join": "round" },
         paint: { "line-color": "#126fc1", "line-width": 6, "line-opacity": 1 },
       });
-      const coordinates = route.geometry.coordinates;
+
+      const selectedRoute = routes.find((route) => route.id === selectedRouteId);
+      if (!selectedRoute) return;
+      const coordinates = selectedRoute.geometry.coordinates;
       const bounds = coordinates.reduce(
         (result, coordinate) => result.extend(coordinate),
         new maplibregl.LngLatBounds(coordinates[0], coordinates[0]),
@@ -144,12 +181,12 @@ export function MapView({
       map.fitBounds(bounds, { padding: 72, maxZoom: 16, duration: 450 });
     };
 
-    if (map.isStyleLoaded()) renderRoute();
-    map.on("style.load", renderRoute);
+    if (map.isStyleLoaded()) renderRoutes();
+    map.on("style.load", renderRoutes);
     return () => {
-      map.off("style.load", renderRoute);
+      map.off("style.load", renderRoutes);
     };
-  }, [mapRef, route, mapStyle]);
+  }, [mapRef, routes, selectedRouteId, mapStyle]);
 
   return <div ref={containerRef} className="maplibre-map" aria-label="Interactive map" />;
 }

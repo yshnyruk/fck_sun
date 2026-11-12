@@ -1088,10 +1088,26 @@
 }
 
 .route-summary {
+  display: block;
+  width: 100%;
   padding: 11px 12px;
   border: 1px solid #dce9f3;
   border-radius: 11px;
+  color: inherit;
   background: #f7fbfe;
+  text-align: left;
+  cursor: pointer;
+}
+
+.route-summary.selected {
+  border-color: #247acb;
+  background: #eef7ff;
+  box-shadow: 0 0 0 1px rgba(36, 122, 203, 0.15);
+}
+
+.route-summary:focus-visible {
+  outline: 2px solid #247acb;
+  outline-offset: 2px;
 }
 
 .route-summary-heading {

@@ -34,6 +34,8 @@ type RoutePlannerPanelProps = {
   requestError: string | null;
   navigationStarted: boolean;
   routes: RoutePlanningResponse | null;
+  selectedRouteId: string | null;
+  onSelectRoute: (route: RoutePlanningResponse["recommended_route"]) => void;
   onStartNavigation: () => void;
   onCloseDestination: () => void;
   onPlanningInputChange: () => void;
@@ -43,10 +45,14 @@ function RouteSummary({
   route,
   recommended = false,
   label,
+  selected = false,
+  onSelect,
 }: {
   route: RoutePlanningResponse["recommended_route"];
   recommended?: boolean;
   label?: string;
+  selected?: boolean;
+  onSelect: () => void;
 }) {
   const distance =
     route.distance_m >= 1000
@@ -62,7 +68,12 @@ function RouteSummary({
         : "Shade data unavailable";
 
   return (
-    <article className="route-summary">
+    <button
+      type="button"
+      className={`route-summary ${selected ? "selected" : ""}`}
+      aria-pressed={selected}
+      onClick={onSelect}
+    >
       <div className="route-summary-heading">
         <strong>{recommended ? "Recommended route" : label}</strong>
         <span>
@@ -80,7 +91,7 @@ function RouteSummary({
           Shade unknown for {Math.round(route.shade.unknown_distance_m)} m of this route
         </p>
       )}
-    </article>
+    </button>
   );
 }
 
@@ -105,6 +116,8 @@ export function RoutePlannerPanel({
   requestError,
   navigationStarted,
   routes,
+  selectedRouteId,
+  onSelectRoute,
   onStartNavigation,
   onCloseDestination,
   onPlanningInputChange,
@@ -237,10 +250,21 @@ export function RoutePlannerPanel({
         </p>
       )}
       {routes && (
-        <section className="planned-routes" aria-label="Planned routes" aria-live="polite">
-          <RouteSummary route={routes.recommended_route} recommended />
+        <section className="planned-routes" aria-label="Available routes" aria-live="polite">
+          <RouteSummary
+            route={routes.recommended_route}
+            recommended
+            selected={selectedRouteId === routes.recommended_route.id}
+            onSelect={() => onSelectRoute(routes.recommended_route)}
+          />
           {routes.alternatives.map((route, index) => (
-            <RouteSummary key={route.id} route={route} label={`Alternative ${index + 1}`} />
+            <RouteSummary
+              key={route.id}
+              route={route}
+              label={`Alternative ${index + 1}`}
+              selected={selectedRouteId === route.id}
+              onSelect={() => onSelectRoute(route)}
+            />
           ))}
         </section>
       )}
