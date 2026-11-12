@@ -13,11 +13,15 @@ from api.schemas.routes import (
 )
 
 
-def build_route(route_id: str, distance_m: float) -> Route:
+def build_route(
+    route_id: str,
+    distance_m: float,
+    coordinates: list[tuple[float, float]] | None = None,
+) -> Route:
     return Route(
         id=route_id,
         geometry=LineStringGeometry(
-            coordinates=[(-74.0, 40.7), (-73.99, 40.71)],
+            coordinates=coordinates or [(-74.0, 40.7), (-73.99, 40.71)],
         ),
         distance_m=distance_m,
         duration_s=900,
@@ -57,7 +61,13 @@ def test_routes_endpoint_returns_geometry_distance_and_duration() -> None:
         async def plan(self, request: RouteRequest) -> RouteResponse:
             return RouteResponse(
                 recommended_route=build_route("route-1", 1250),
-                alternatives=[],
+                alternatives=[
+                    build_route(
+                        "route-2",
+                        1400,
+                        [(-74.0, 40.7), (-74.01, 40.72), (-73.99, 40.71)],
+                    )
+                ],
             )
 
     app.dependency_overrides[get_route_planning_service] = lambda: StubService()
@@ -80,6 +90,9 @@ def test_routes_endpoint_returns_geometry_distance_and_duration() -> None:
     }
     assert route["distance_m"] == 1250
     assert route["duration_s"] == 900
+    alternative = response.json()["alternatives"][0]
+    assert alternative["id"] == "route-2"
+    assert alternative["geometry"]["coordinates"] != route["geometry"]["coordinates"]
 
 
 def test_routes_endpoint_validates_coordinates() -> None:

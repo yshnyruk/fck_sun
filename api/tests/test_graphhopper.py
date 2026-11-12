@@ -29,6 +29,21 @@ def graphhopper_response() -> dict[str, Any]:
     }
 
 
+def graphhopper_alternatives_response() -> dict[str, Any]:
+    response = graphhopper_response()
+    response["paths"].append(
+        {
+            "distance": 1450,
+            "time": 1020000,
+            "points": {
+                "type": "LineString",
+                "coordinates": [[-74.0, 40.7], [-74.01, 40.72], [-73.99, 40.71]],
+            },
+        }
+    )
+    return response
+
+
 @pytest.fixture
 async def graphhopper_client() -> AsyncIterator[httpx.AsyncClient]:
     async def handler(request: httpx.Request) -> httpx.Response:
@@ -66,6 +81,32 @@ async def test_adapter_normalizes_graphhopper_routes(
     assert routes[0].distance_m == 1250.5
     assert routes[0].duration_s == 900
     assert routes[0].geometry.coordinates == [(-74.0, 40.7), (-73.99, 40.71)]
+
+
+@pytest.mark.anyio
+async def test_adapter_returns_available_alternative_routes() -> None:
+    async def handler(request: httpx.Request) -> httpx.Response:
+        assert request.url.params["alternative_route.max_paths"] == "3"
+        return httpx.Response(200, json=graphhopper_alternatives_response())
+
+    async with httpx.AsyncClient(
+        transport=httpx.MockTransport(handler),
+        base_url="https://graphhopper.test",
+    ) as client:
+        adapter = GraphHopperAdapter(
+            Settings(graphhopper_api_key="test-key"),
+            client,
+        )
+
+        routes = await adapter.get_routes(
+            Coordinate(latitude=40.7, longitude=-74.0),
+            Coordinate(latitude=40.71, longitude=-73.99),
+        )
+
+    assert [route.id for route in routes] == ["graphhopper-1", "graphhopper-2"]
+    assert routes[0].geometry.coordinates != routes[1].geometry.coordinates
+    assert routes[1].distance_m == 1450
+    assert routes[1].duration_s == 1020
 
 
 @pytest.mark.anyio
