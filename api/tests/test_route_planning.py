@@ -11,6 +11,7 @@ from api.schemas.routes import (
     Route,
     RouteRequest,
     RouteResponse,
+    ShadeEstimate,
 )
 from api.services.route_planning import RoutePlanningError, RoutePlanningService
 
@@ -56,6 +57,42 @@ async def test_route_planning_service_returns_recommended_route_and_alternatives
     assert response.alternatives[0].id == "route-2"
     assert response.recommended_route.score is not None
     assert response.alternatives[0].score is not None
+    assert response.recommended_route.shade is None
+    assert response.alternatives[0].shade is None
+    assert response.recommended_route.coverage_confidence is CoverageConfidence.INSUFFICIENT
+
+
+@pytest.mark.anyio
+async def test_route_planning_preserves_routes_without_unsupported_shade_estimates() -> None:
+    class StubAdapter:
+        async def get_routes(
+            self,
+            origin: Coordinate,
+            destination: Coordinate,
+            *,
+            max_paths: int = 3,
+        ) -> list[Route]:
+            route = build_route("route-without-shade-data", 1250)
+            route.shade = ShadeEstimate(
+                shade_coverage_percent=100,
+                classified_distance_m=1250,
+                unknown_distance_m=0,
+            )
+            route.coverage_confidence = CoverageConfidence.HIGH
+            return [route]
+
+    response = await RoutePlanningService(StubAdapter()).plan(
+        RouteRequest(
+            origin=Coordinate(latitude=40.7, longitude=-74.0),
+            destination=Coordinate(latitude=40.71, longitude=-73.99),
+        )
+    )
+
+    assert response.recommended_route.id == "route-without-shade-data"
+    assert response.recommended_route.distance_m == 1250
+    assert response.recommended_route.duration_s == 900
+    assert response.recommended_route.shade is None
+    assert response.recommended_route.coverage_confidence is CoverageConfidence.INSUFFICIENT
 
 
 @pytest.mark.anyio

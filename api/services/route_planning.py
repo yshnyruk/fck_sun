@@ -34,12 +34,13 @@ class RoutePlanningService:
         self._adapter = adapter
 
     async def plan(self, request: RouteRequest) -> RouteResponse:
-        routes = await self._adapter.get_routes(
+        provider_routes = await self._adapter.get_routes(
             request.origin,
             request.destination,
         )
-        if not routes:
+        if not provider_routes:
             raise RoutePlanningError("No pedestrian route was returned by the routing provider")
+        routes = [_route_without_unsupported_shade(route) for route in provider_routes]
         coverages = {
             route.id: _coverage_for_route(route)
             for route in routes
@@ -53,6 +54,16 @@ class RoutePlanningService:
             recommended_route=recommended_route,
             alternatives=alternatives,
         )
+
+
+def _route_without_unsupported_shade(route: Route) -> Route:
+    """Keep pedestrian metrics while removing unverified shade estimates."""
+    return route.model_copy(
+        update={
+            "shade": None,
+            "coverage_confidence": CoverageConfidence.INSUFFICIENT,
+        }
+    )
 
 
 def _coverage_for_route(route: Route) -> RouteShadeCoverage:
