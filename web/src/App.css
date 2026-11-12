@@ -612,6 +612,43 @@
   text-transform: none !important;
 }
 
+.shade-preference {
+  padding: 0 0 14px;
+  margin-bottom: 12px;
+  border-bottom: 1px solid #e5eef6;
+}
+
+.shade-preference > p {
+  margin-bottom: 8px;
+}
+
+.shade-preference-options {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 5px;
+}
+
+.shade-preference-options button {
+  display: grid;
+  min-height: 38px;
+  align-items: center;
+  justify-content: center;
+  padding: 7px 3px;
+  border: 1px solid #c8dcec;
+  border-radius: 9px;
+  color: #2775b8;
+  background: #f7fbff;
+  font-size: 11px;
+  font-weight: 700;
+  text-align: center;
+}
+
+.shade-preference-options button.selected {
+  border-color: #247acb;
+  color: white;
+  background: #247acb;
+}
+
 .recent-destinations p {
   margin: 0 0 7px 4px;
   color: #7691aa;

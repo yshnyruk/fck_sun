@@ -4,6 +4,7 @@ import { Icon } from "./components/Icon";
 import { MapView } from "./components/MapView";
 import { config } from "./config";
 import type { MapStyleName } from "./map/mapConfig";
+import { SHADE_PREFERENCES, type ShadePreference } from "./shadePreferences";
 import "./App.css";
 import "maplibre-gl/dist/maplibre-gl.css";
 
@@ -67,6 +68,7 @@ function App() {
   const selectedMarkerRef = useRef<maplibregl.Marker | null>(null);
   const [startingLocationMethod, setStartingLocationMethod] =
     useState<StartingLocationMethod>("current");
+  const [shadePreference, setShadePreference] = useState<ShadePreference>("medium");
   const [manualLatitude, setManualLatitude] = useState("");
   const [manualLongitude, setManualLongitude] = useState("");
   const [locationError, setLocationError] = useState<string | null>(null);
@@ -598,6 +600,29 @@ function App() {
                 <p className="location-help">
                   You can also tap the map to choose a starting point.
                 </p>
+              </div>
+              <div className="shade-preference">
+                <p>Shade preference</p>
+                <div
+                  className="shade-preference-options"
+                  role="group"
+                  aria-label="Shade preference"
+                >
+                  {SHADE_PREFERENCES.map((preference) => (
+                    <button
+                      key={preference.value}
+                      className={shadePreference === preference.value ? "selected" : ""}
+                      type="button"
+                      aria-pressed={shadePreference === preference.value}
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        setShadePreference(preference.value);
+                      }}
+                    >
+                      {preference.label}
+                    </button>
+                  ))}
+                </div>
               </div>
               <p>Recent destinations</p>
               {recentDestinations.map((destination) => (
