@@ -23,6 +23,22 @@ The frontend only reads `VITE_API_BASE_URL`, which defaults to `/api/v1`.
 Browser-exposed `VITE_` variables must not contain private service
 credentials.
 
+## Route segmentation
+
+The backend can split each ordered route `LineString` into renderable
+`RouteSegment` objects using `segment_route_geometry`. The
+`RouteSegmentationConfig.max_segment_length_m` setting controls the maximum
+geodesic segment length; its default is 100 metres and callers can provide a
+different value for other use cases. Long geometry edges are split with
+interpolated coordinates, so adjacent segments share endpoints and can be
+rendered or reconstructed in route order.
+
+Segment distances use the WGS84 spherical mean Earth radius (6,371,008.8 m)
+with haversine calculations. Consequently, the sum of segment distances is
+within floating-point tolerance of the geometry length calculated by this
+module, but may differ slightly from a routing provider's road-network
+distance. Provider distance should remain authoritative for route totals.
+
 ## Development
 
 Install the backend dependencies in a virtual environment and the frontend
