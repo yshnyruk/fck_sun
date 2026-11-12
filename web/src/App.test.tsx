@@ -173,12 +173,12 @@ describe("FckSun frontend", () => {
     fireEvent.change(screen.getByLabelText("Departure date and time"), {
       target: { value: toLocalDateTimeInput(selectedDeparture) },
     });
-    fireEvent.click(screen.getByRole("button", { name: /Start navigation/ }));
-
     expect(
       (await screen.findByRole("button", { name: "Planning route..." })).hasAttribute("disabled"),
     ).toBe(true);
-    const routeRequest = fetchMock.mock.calls.find(([input]) => String(input).endsWith("/routes"));
+    const routeRequest = fetchMock.mock.calls
+      .filter(([input]) => String(input).endsWith("/routes"))
+      .at(-1);
     expect(routeRequest).toBeDefined();
     expect(routeRequest?.[1]?.method).toBe("POST");
     expect(routeRequest?.[1]?.headers).toMatchObject({ "Content-Type": "application/json" });
@@ -200,7 +200,9 @@ describe("FckSun frontend", () => {
       "Navigation started",
     );
     expect(screen.getByText(/1.2 km · 15 min/)).toBeDefined();
-    expect(screen.getByText(/Estimated shade 65% · Partial data coverage/)).toBeDefined();
+    expect(screen.getByText("Overall shade coverage")).toBeDefined();
+    expect(screen.getByText("65%")).toBeDefined();
+    expect(screen.getByText("Coverage confidence: Partial")).toBeDefined();
     expect(screen.getByText("Shade unknown for 200 m of this route")).toBeDefined();
   });
 
@@ -240,10 +242,12 @@ describe("FckSun frontend", () => {
       "Current location",
     );
     expect(screen.getByText("Device location")).toBeDefined();
-    fireEvent.click(screen.getByRole("button", { name: /Start navigation/ }));
+    await screen.findByText("Recommended route");
+    fireEvent.click(screen.getByRole("button", { name: "Start navigation" }));
     await screen.findByRole("button", { name: "Navigation started" });
-
-    const routeRequest = fetchMock.mock.calls.find(([input]) => String(input).endsWith("/routes"));
+    const routeRequest = fetchMock.mock.calls
+      .filter(([input]) => String(input).endsWith("/routes"))
+      .at(-1);
     expect(JSON.parse(String(routeRequest?.[1]?.body))).toMatchObject({
       origin: { latitude: 40.78, longitude: -73.97 },
       destination: { latitude: 40.75, longitude: -73.98 },
@@ -300,10 +304,13 @@ describe("FckSun frontend", () => {
     expect((screen.getByLabelText("Starting point") as HTMLInputElement).value).toBe(
       "Current location",
     );
-    fireEvent.click(screen.getByRole("button", { name: /Start navigation/ }));
+    await screen.findByText("Recommended route");
+    fireEvent.click(screen.getByRole("button", { name: "Start navigation" }));
     await screen.findByRole("button", { name: "Navigation started" });
 
-    const routeRequest = fetchMock.mock.calls.find(([input]) => String(input).endsWith("/routes"));
+    const routeRequest = fetchMock.mock.calls
+      .filter(([input]) => String(input).endsWith("/routes"))
+      .at(-1);
     expect(JSON.parse(String(routeRequest?.[1]?.body)).origin).toEqual({
       latitude: 40.71,
       longitude: -74.01,
@@ -430,7 +437,10 @@ describe("FckSun frontend", () => {
     expect((await screen.findByRole("alert")).textContent).toBe(
       "Choose a starting location before planning a route.",
     );
-    expect(fetchMock.mock.calls.some(([input]) => String(input).endsWith("/routes"))).toBe(false);
+    const routeRequests = fetchMock.mock.calls
+      .filter(([input]) => String(input).endsWith("/routes"))
+      .map(([, init]) => JSON.parse(String(init?.body)) as { planning_mode: string });
+    expect(routeRequests.every((request) => request.planning_mode !== "depart_at")).toBe(true);
   });
 
   it("rejects a past scheduled departure before sending a route request", async () => {
@@ -470,6 +480,9 @@ describe("FckSun frontend", () => {
     expect((await screen.findByRole("alert")).textContent).toBe(
       "Departure time must be in the future.",
     );
-    expect(fetchMock.mock.calls.some(([input]) => String(input).endsWith("/routes"))).toBe(false);
+    const routeRequests = fetchMock.mock.calls
+      .filter(([input]) => String(input).endsWith("/routes"))
+      .map(([, init]) => JSON.parse(String(init?.body)) as { planning_mode: string });
+    expect(routeRequests.some((request) => request.planning_mode === "depart_at")).toBe(false);
   });
 });

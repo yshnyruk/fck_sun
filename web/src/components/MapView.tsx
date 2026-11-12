@@ -26,6 +26,7 @@ export function MapView({
   selectedRouteId,
 }: MapViewProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
+  const appliedMapStyleRef = useRef<MapStyleName>("default");
   const longPressTimerRef = useRef<ReturnType<typeof window.setTimeout> | null>(null);
   const longPressTriggeredRef = useRef(false);
 
@@ -106,8 +107,9 @@ export function MapView({
   }, [mapRef, onMapLongPress, onMapShortPress, onMapDragStart, onMapReady]);
 
   useEffect(() => {
-    if (mapRef.current) {
+    if (mapRef.current && appliedMapStyleRef.current !== mapStyle) {
       mapRef.current.setStyle(MAP_STYLES[mapStyle]);
+      appliedMapStyleRef.current = mapStyle;
     }
   }, [mapRef, mapStyle]);
 
@@ -115,7 +117,10 @@ export function MapView({
     const map = mapRef.current;
     if (!map) return;
 
+    let rendered = false;
     const renderRoutes = () => {
+      if (rendered || !map.isStyleLoaded()) return;
+      rendered = true;
       for (const layerId of [
         "planned-route-selected-line",
         "planned-route-selected-casing",
@@ -183,8 +188,12 @@ export function MapView({
 
     if (map.isStyleLoaded()) renderRoutes();
     map.on("style.load", renderRoutes);
+    map.on("load", renderRoutes);
+    map.on("render", renderRoutes);
     return () => {
       map.off("style.load", renderRoutes);
+      map.off("load", renderRoutes);
+      map.off("render", renderRoutes);
     };
   }, [mapRef, routes, selectedRouteId, mapStyle]);
 

@@ -1128,6 +1128,20 @@
   font-size: 11px;
 }
 
+.route-summary-coverage {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.route-summary-coverage strong {
+  color: #244665;
+}
+
+.route-summary-confidence {
+  font-weight: 600;
+}
+
 .route-summary .route-summary-unknown {
   color: #926526;
 }

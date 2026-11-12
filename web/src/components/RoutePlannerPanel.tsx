@@ -62,10 +62,10 @@ function RouteSummary({
   const shadePercent = route.shade?.shade_coverage_percent;
   const confidence =
     route.coverage_confidence === "high"
-      ? "High data coverage"
+      ? "High"
       : route.coverage_confidence === "partial"
-        ? "Partial data coverage"
-        : "Shade data unavailable";
+        ? "Partial"
+        : "Insufficient";
 
   return (
     <button
@@ -80,11 +80,16 @@ function RouteSummary({
           {distance} · {durationMinutes} min
         </span>
       </div>
-      <p>
-        {shadePercent === null || shadePercent === undefined
-          ? "Shade estimate unavailable"
-          : `Estimated shade ${Math.round(shadePercent)}%`}
-        {` · ${confidence}`}
+      <p className="route-summary-coverage">
+        <span>Overall shade coverage</span>
+        <strong>
+          {shadePercent === null || shadePercent === undefined
+            ? "Unavailable"
+            : `${Math.round(shadePercent)}%`}
+        </strong>
+      </p>
+      <p className="route-summary-confidence">
+        Coverage confidence: {confidence}
       </p>
       {route.shade && route.shade.unknown_distance_m > 0 && (
         <p className="route-summary-unknown">
