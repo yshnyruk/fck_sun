@@ -125,6 +125,20 @@ describe("FckSun frontend", () => {
     ]);
   });
 
+  it("shows a straight shadow-time slider and updates its displayed time", () => {
+    render(<App />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Turn shadows on" }));
+    expect(screen.getByText("Shadow time")).toBeDefined();
+    const slider = screen.getByRole("slider", { name: "Choose time of day" });
+    fireEvent.change(slider, { target: { value: "12" } });
+
+    expect(within(screen.getByLabelText("Shadow time")).getByText("12:00", { selector: "strong" }))
+      .toBeDefined();
+    expect(screen.getByText("06:00")).toBeDefined();
+    expect(screen.getByText("18:00")).toBeDefined();
+  });
+
   it("converts a selected local departure time to an ISO timestamp", () => {
     const localDeparture = new Date(2030, 4, 10, 14, 30);
 

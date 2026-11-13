@@ -806,27 +806,15 @@ function App() {
         </div>
 
         {shadowsEnabled && (
-          <div className="time-dial" aria-label="Shadow time">
-            <div className="dial-arc" />
-            <div className="dial-marker marker-midnight">
-              <Icon name="moon" />
-              <span>00:00</span>
-            </div>
-            <div className="dial-marker marker-sunrise">
-              <Icon name="sunrise" />
-              <span>06:00</span>
-            </div>
-            <div className="dial-marker marker-midday">
-              <Icon name="sun" />
-              <span>12:00</span>
-            </div>
-            <div className="dial-marker marker-sunset">
-              <Icon name="sunset" />
-              <span>18:00</span>
-            </div>
-            <div className="dial-now">
-              <span className="dial-now-arrow" />
-              <strong>{formattedTime}</strong>
+          <div className="shadow-time-control" aria-label="Shadow time">
+            <div className="shadow-time-heading">
+              <span>Shadow time</span>
+              <strong aria-live="polite">{formattedTime}</strong>
+              {time !== currentTime && (
+                <button className="return-now" type="button" onClick={() => setTime(currentTime)}>
+                  Now
+                </button>
+              )}
             </div>
             <input
               aria-label="Choose time of day"
@@ -837,11 +825,13 @@ function App() {
               value={time}
               onChange={(event) => setTime(Number(event.target.value))}
             />
-            {time !== currentTime && (
-              <button className="return-now" type="button" onClick={() => setTime(currentTime)}>
-                Tap to return to now
-              </button>
-            )}
+            <div className="shadow-time-labels" aria-hidden="true">
+              <span>00:00</span>
+              <span>06:00</span>
+              <span>12:00</span>
+              <span>18:00</span>
+              <span>24:00</span>
+            </div>
           </div>
         )}
 
