@@ -6,6 +6,7 @@ import { RoutePlannerPanel, type DestinationSearchResult } from "./components/Ro
 import { MapView } from "./components/MapView";
 import { config } from "./config";
 import { parseRoutePlanningResponse, type RoutePlanningResponse } from "./routeApi";
+import { sampleRouteShadows } from "./routeShadeSampling";
 import type { MapStyleName } from "./map/mapConfig";
 import { PLANNING_MODES, type PlanningMode } from "./planningModes";
 import type { ShadePreference } from "./shadePreferences";
@@ -361,6 +362,10 @@ function App() {
         return;
       }
     }
+    const shadeEvaluationTime =
+      (planningMode === "depart_at" ? departureTime : null) ??
+      (planningMode === "arrive_by" ? arrivalTime : null) ??
+      new Date().toISOString();
 
     setRouteRequestState("loading");
     setRouteRequestError(null);
@@ -370,7 +375,7 @@ function App() {
     const controller = new AbortController();
     routeRequestControllerRef.current = controller;
     try {
-      const response = await fetch(`${config.apiBaseUrl}/routes`, {
+      const response = await fetch(`${config.apiBaseUrl}/routes/candidates`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         signal: controller.signal,
@@ -392,8 +397,28 @@ function App() {
       if (!response.ok) {
         throw new Error(`Route planning failed with status ${response.status}`);
       }
-      const result = parseRoutePlanningResponse(await response.json());
-      if (!result) throw new Error("Route planning returned an invalid response");
+      const candidates = parseRoutePlanningResponse(await response.json());
+      if (!candidates) throw new Error("Route planning returned invalid route candidates");
+      const routesToScore = await sampleRouteShadows(
+        [candidates.recommended_route, ...candidates.alternatives],
+        controller.signal,
+        shadeEvaluationTime,
+      );
+      if (controller.signal.aborted) return;
+      let result = candidates;
+      try {
+        const scoreResponse = await fetch(`${config.apiBaseUrl}/routes/score`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          signal: controller.signal,
+          body: JSON.stringify({ routes: routesToScore, shade_preference: shadePreference }),
+        });
+        if (scoreResponse.ok) {
+          result = parseRoutePlanningResponse(await scoreResponse.json()) ?? candidates;
+        }
+      } catch (error) {
+        if (controller.signal.aborted) throw error;
+      }
       setPlannedRoutes(result);
       setSelectedRouteId(result.recommended_route.id);
       setRouteRequestState("idle");

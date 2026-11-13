@@ -57,15 +57,19 @@ calculation.
 
 ## Segment shade mapping
 
-`map_shadows_to_segments` associates each ordered `RouteSegment` with its
-expected arrival time and a normalized `SegmentShadow`. It requests a small
-viewport around each segment's representative midpoint and converts the
-arrival time to UTC. Requests are cached by midpoint and timestamp to avoid
-duplicate provider calls. The backend ShadeMap REST URL has not been verified
-and currently returns HTML rather than shadow data, so these route samples
-remain `unknown` when the adapter cannot normalize a response. The current
-map overlay uses the documented ShadeMap browser SDK instead; this does not
-make server-side route shade estimates available.
+Route planning uses a two-step flow. `POST /api/v1/routes/candidates` returns
+pedestrian candidates without contacting ShadeMap. The frontend samples each
+candidate on a hidden MapLibre canvas with the documented ShadeMap browser
+SDK, then sends the classified segments to `POST /api/v1/routes/score`. The
+backend remains responsible for ranking and returning the recommended route
+and alternatives. The user's visible shadow overlay is a separate toggle and
+does not trigger another route calculation.
+
+The ShadeMap SDK does not expose data-coverage confidence, so SDK classifications
+are labeled partial. If the SDK key, WebGL, or sampling fails, route segments
+remain unknown and the backend falls back to distance and duration scoring.
+The backend ShadeMap REST URL has not been verified and currently returns HTML;
+it is not used by this route-candidate flow.
 
 ## Overall route shade coverage
 

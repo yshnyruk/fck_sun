@@ -5,9 +5,12 @@ from typing import Protocol
 from api.schemas.route_coverage import RouteShadeCoverage
 from api.schemas.routes import (
     Coordinate,
+    CoverageConfidence,
     Route,
     RouteRequest,
     RouteResponse,
+    ShadeClassification,
+    ShadePreference,
 )
 from api.schemas.segments import RouteSegment
 from api.services.route_scoring import select_recommended_route
@@ -77,6 +80,79 @@ class RoutePlanningService:
             recommended_route=recommended_route,
             alternatives=alternatives,
         )
+
+
+def score_routes_with_frontend_shade(
+    routes: list[Route],
+    preference: ShadePreference,
+) -> RouteResponse:
+    """Rank route candidates using segment shade estimates supplied by the map client.
+
+    The frontend SDK is the only currently verified ShadeMap integration. Its
+    samples are deliberately treated as partial coverage because the SDK does
+    not report geographic data completeness.
+    """
+    coverages: dict[str, RouteShadeCoverage] = {}
+    updated_routes: list[Route] = []
+    for route in routes:
+        shade = route.shade
+        if shade is None or not shade.segments:
+            raise RoutePlanningError("Each route must include sampled shade segments")
+        shaded_raw = exposed_raw = unknown_raw = 0.0
+        for segment in shade.segments:
+            distance = segment.end_distance_m - segment.start_distance_m
+            if segment.classification is ShadeClassification.CONFIRMED_SHADE:
+                shaded_raw += distance
+            elif segment.classification is ShadeClassification.CONFIRMED_EXPOSURE:
+                exposed_raw += distance
+            else:
+                unknown_raw += distance
+        sampled_total = shaded_raw + exposed_raw + unknown_raw
+        total = route.distance_m
+        if sampled_total <= 0:
+            raise RoutePlanningError("Sampled shade segments must have positive distance")
+        if abs(sampled_total - total) > max(1.0, total * 0.01):
+            raise RoutePlanningError("Sampled shade segments do not cover the route")
+        distance_scale = total / sampled_total
+        shaded = shaded_raw * distance_scale
+        exposed = exposed_raw * distance_scale
+        unknown = unknown_raw * distance_scale
+        classified = shaded + exposed
+        coverages[route.id] = RouteShadeCoverage(
+            total_distance_m=total,
+            shaded_distance_m=shaded,
+            exposed_distance_m=exposed,
+            unknown_distance_m=unknown,
+            shaded_percentage=shaded / total * 100,
+            exposed_percentage=exposed / total * 100,
+            unknown_percentage=unknown / total * 100,
+            usable_percentage=classified / total * 100,
+            coverage_confidence=(
+                CoverageConfidence.PARTIAL if classified > 0 else CoverageConfidence.INSUFFICIENT
+            ),
+        )
+        updated_routes.append(
+            route.model_copy(
+                update={
+                    "coverage_confidence": coverages[route.id].coverage_confidence,
+                    "shade": shade.model_copy(
+                        update={
+                            "shade_coverage_percent": (
+                                shaded / classified * 100 if classified > 0 else None
+                            ),
+                            "classified_distance_m": classified,
+                            "unknown_distance_m": unknown,
+                        }
+                    ),
+                }
+            )
+        )
+    recommended, alternatives = select_recommended_route(
+        updated_routes,
+        coverages,
+        preference,
+    )
+    return RouteResponse(recommended_route=recommended, alternatives=alternatives)
 
 
 def _segments_for_route(route: Route) -> list[RouteSegment]:

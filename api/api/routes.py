@@ -13,14 +13,18 @@ from api.integrations.shademap import (
     ShadeMapConfigurationError,
     ShadeMapError,
 )
-from api.schemas.routes import RouteRequest, RouteResponse
+from api.schemas.routes import RouteRequest, RouteResponse, RouteScoreRequest
 from api.schemas.search import LocationSearchResponse
 from api.schemas.shadows import ShadowRequest, ShadowResponse, ShadowViewport
 from api.services.location_search import (
     LocationSearchService,
     create_location_search_service,
 )
-from api.services.route_planning import RoutePlanningError, RoutePlanningService
+from api.services.route_planning import (
+    RoutePlanningError,
+    RoutePlanningService,
+    score_routes_with_frontend_shade,
+)
 from api.services.viewport_shadows import ViewportShadowService
 from fastapi import APIRouter, Depends, Query
 from starlette.exceptions import HTTPException
@@ -39,6 +43,11 @@ def get_route_planning_service() -> RoutePlanningService:
         GraphHopperAdapter(settings),
         ShadeMapAdapter(settings),
     )
+
+
+def get_route_candidate_service() -> RoutePlanningService:
+    """Return a route planner that leaves shade sampling to the browser SDK."""
+    return RoutePlanningService(GraphHopperAdapter(get_settings()))
 
 
 def get_location_search_service() -> LocationSearchService:
@@ -104,6 +113,36 @@ async def generate_routes(
         raise HTTPException(
             status_code=502,
             detail="Route planning provider is unavailable.",
+        ) from error
+
+
+@router.post("/routes/candidates", response_model=RouteResponse, tags=["routes"])
+async def generate_route_candidates(
+    request: RouteRequest,
+    service: Annotated[RoutePlanningService, Depends(get_route_candidate_service)],
+) -> RouteResponse:
+    try:
+        return await service.plan(request)
+    except (GraphHopperNoRouteError, RoutePlanningError) as error:
+        raise HTTPException(
+            status_code=422,
+            detail="No pedestrian route could be generated for these coordinates.",
+        ) from error
+    except GraphHopperError as error:
+        raise HTTPException(
+            status_code=502,
+            detail="Route planning provider is unavailable.",
+        ) from error
+
+
+@router.post("/routes/score", response_model=RouteResponse, tags=["routes"])
+async def score_route_candidates(request: RouteScoreRequest) -> RouteResponse:
+    try:
+        return score_routes_with_frontend_shade(request.routes, request.shade_preference)
+    except RoutePlanningError as error:
+        raise HTTPException(
+            status_code=422,
+            detail="Route shade samples could not be used for scoring.",
         ) from error
 
 

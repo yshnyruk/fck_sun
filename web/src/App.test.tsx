@@ -29,6 +29,10 @@ vi.mock("./components/MapView", () => ({
   ),
 }));
 
+vi.mock("./routeShadeSampling", () => ({
+  sampleRouteShadows: async (routes: unknown[]) => routes,
+}));
+
 const geolocationDescriptor = Object.getOwnPropertyDescriptor(navigator, "geolocation");
 const routeResponse = {
   recommended_route: {
@@ -139,6 +143,40 @@ describe("FckSun frontend", () => {
     expect(screen.getByText("18:00")).toBeDefined();
   });
 
+  it("keeps planned routes visible while the separate shadow overlay is toggled", async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      if (String(input).includes("/search?")) {
+        return {
+          ok: true,
+          json: async () => ({
+            results: [
+              {
+                name: "Central Park",
+                label: "New York, NY",
+                coordinate: { latitude: 40.78, longitude: -73.97 },
+              },
+            ],
+          }),
+        } as Response;
+      }
+      return { ok: true, json: async () => routeResponse } as Response;
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<App />);
+    fireEvent.click(screen.getByRole("button", { name: "Set test starting location" }));
+    await selectCentralPark();
+    expect(await screen.findByText("Recommended route")).toBeDefined();
+
+    fireEvent.click(screen.getByRole("button", { name: "Turn shadows on" }));
+    expect(screen.getByText("Recommended route")).toBeDefined();
+    fireEvent.click(screen.getByRole("button", { name: "Turn shadows off" }));
+    expect(screen.getByText("Recommended route")).toBeDefined();
+    expect(fetchMock.mock.calls.filter(([input]) => String(input).endsWith("/routes/candidates"))).toHaveLength(
+      1,
+    );
+  });
+
   it("converts a selected local departure time to an ISO timestamp", () => {
     const localDeparture = new Date(2030, 4, 10, 14, 30);
 
@@ -165,6 +203,9 @@ describe("FckSun frontend", () => {
           }),
         } as Response);
       }
+      if (url.endsWith("/routes/score")) {
+        return Promise.resolve({ ok: true, json: async () => routeResponse } as Response);
+      }
       return new Promise<Response>((resolve) => {
         finishRouteRequest = resolve;
       });
@@ -175,7 +216,7 @@ describe("FckSun frontend", () => {
     fireEvent.click(screen.getByRole("button", { name: "Set test starting location" }));
 
     await selectCentralPark();
-    expect(fetchMock.mock.calls.some(([input]) => String(input).endsWith("/routes"))).toBe(true);
+    expect(fetchMock.mock.calls.some(([input]) => String(input).endsWith("/routes/candidates"))).toBe(true);
     expect((screen.getByLabelText("Starting point") as HTMLInputElement).value).toBe(
       "Current location",
     );
@@ -191,7 +232,7 @@ describe("FckSun frontend", () => {
       (await screen.findByRole("button", { name: "Planning route..." })).hasAttribute("disabled"),
     ).toBe(true);
     const routeRequest = fetchMock.mock.calls
-      .filter(([input]) => String(input).endsWith("/routes"))
+      .filter(([input]) => String(input).endsWith("/routes/candidates"))
       .at(-1);
     expect(routeRequest).toBeDefined();
     expect(routeRequest?.[1]?.method).toBe("POST");
@@ -267,7 +308,7 @@ describe("FckSun frontend", () => {
     fireEvent.click(screen.getByRole("button", { name: "Start navigation" }));
     await screen.findByRole("button", { name: "Navigation started" });
     const routeRequest = fetchMock.mock.calls
-      .filter(([input]) => String(input).endsWith("/routes"))
+      .filter(([input]) => String(input).endsWith("/routes/candidates"))
       .at(-1);
     expect(JSON.parse(String(routeRequest?.[1]?.body))).toMatchObject({
       origin: { latitude: 40.78, longitude: -73.97 },
@@ -330,7 +371,7 @@ describe("FckSun frontend", () => {
     await screen.findByRole("button", { name: "Navigation started" });
 
     const routeRequest = fetchMock.mock.calls
-      .filter(([input]) => String(input).endsWith("/routes"))
+      .filter(([input]) => String(input).endsWith("/routes/candidates"))
       .at(-1);
     expect(JSON.parse(String(routeRequest?.[1]?.body)).origin).toEqual({
       latitude: 40.71,
@@ -459,7 +500,7 @@ describe("FckSun frontend", () => {
       "Choose a starting location before planning a route.",
     );
     const routeRequests = fetchMock.mock.calls
-      .filter(([input]) => String(input).endsWith("/routes"))
+      .filter(([input]) => String(input).endsWith("/routes/candidates"))
       .map(([, init]) => JSON.parse(String(init?.body)) as { planning_mode: string });
     expect(routeRequests.every((request) => request.planning_mode !== "depart_at")).toBe(true);
   });
@@ -502,7 +543,7 @@ describe("FckSun frontend", () => {
       "Departure time must be in the future.",
     );
     const routeRequests = fetchMock.mock.calls
-      .filter(([input]) => String(input).endsWith("/routes"))
+      .filter(([input]) => String(input).endsWith("/routes/candidates"))
       .map(([, init]) => JSON.parse(String(init?.body)) as { planning_mode: string });
     expect(routeRequests.some((request) => request.planning_mode === "depart_at")).toBe(false);
   });

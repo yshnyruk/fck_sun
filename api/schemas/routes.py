@@ -108,3 +108,15 @@ class Route(BaseModel):
 class RouteResponse(BaseModel):
     recommended_route: Route
     alternatives: list[Route] = Field(default_factory=list)
+
+
+class RouteScoreRequest(BaseModel):
+    routes: list[Route] = Field(min_length=1, max_length=3)
+    shade_preference: ShadePreference
+
+    @model_validator(mode="after")
+    def validate_unique_routes(self) -> "RouteScoreRequest":
+        identifiers = [route.id for route in self.routes]
+        if len(set(identifiers)) != len(identifiers):
+            raise ValueError("route identifiers must be unique")
+        return self
