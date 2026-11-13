@@ -441,6 +441,11 @@ function App() {
   );
 
   const formattedTime = `${String(Math.floor(time)).padStart(2, "0")}:${time % 1 ? "30" : "00"}`;
+  const shadowTime = useMemo(() => {
+    const requestedTime = new Date();
+    requestedTime.setHours(Math.floor(time), time % 1 ? 30 : 0, 0, 0);
+    return requestedTime.toISOString();
+  }, [time]);
   const planningModeLabel =
     planningMode === "leave_now"
       ? `Leave ${new Intl.DateTimeFormat(undefined, { hour: "numeric", minute: "2-digit" }).format(new Date())}`
@@ -666,6 +671,8 @@ function App() {
           mapStyle={mapStyle}
           routes={routeOptions}
           selectedRouteId={selectedRouteId}
+          shadowsEnabled={shadowsEnabled}
+          shadowTime={shadowTime}
         />
         {selectedDestination && (
           <section className="route-points-card" aria-label="Route locations">

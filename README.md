@@ -19,9 +19,11 @@ Backend settings include `ENVIRONMENT`, `LOG_LEVEL`, `CORS_ORIGINS`,
 `GRAPHHOPPER_BASE_URL`, `GRAPHHOPPER_API_KEY`, `SHADEMAP_BASE_URL`,
 `SHADEMAP_API_KEY`, and `EXTERNAL_REQUEST_TIMEOUT_SECONDS`.
 
-The frontend only reads `VITE_API_BASE_URL`, which defaults to `/api/v1`.
-Browser-exposed `VITE_` variables must not contain private service
-credentials.
+The frontend reads `VITE_API_BASE_URL`, which defaults to `/api/v1`, and
+`VITE_SHADEMAP_API_KEY`. The ShadeMap key in the frontend must be a separate
+client key intended for browser use; never copy `SHADEMAP_API_KEY` into
+frontend configuration. ShadeMap's MapLibre SDK uses the client key to enable
+its browser shadow simulation.
 
 ## Route segmentation
 
@@ -56,12 +58,14 @@ calculation.
 ## Segment shade mapping
 
 `map_shadows_to_segments` associates each ordered `RouteSegment` with its
-expected arrival time and a normalized `SegmentShadow`. Because the current
-ShadeMap boundary accepts viewports, the mapper requests a small viewport
-around each segment's representative midpoint and converts the arrival time
-to UTC. Requests are cached by midpoint and timestamp to avoid duplicate
-provider calls. Provider failures and empty responses affect only the
-corresponding segment and are represented as `unknown`.
+expected arrival time and a normalized `SegmentShadow`. It requests a small
+viewport around each segment's representative midpoint and converts the
+arrival time to UTC. Requests are cached by midpoint and timestamp to avoid
+duplicate provider calls. The backend ShadeMap REST URL has not been verified
+and currently returns HTML rather than shadow data, so these route samples
+remain `unknown` when the adapter cannot normalize a response. The current
+map overlay uses the documented ShadeMap browser SDK instead; this does not
+make server-side route shade estimates available.
 
 ## Overall route shade coverage
 

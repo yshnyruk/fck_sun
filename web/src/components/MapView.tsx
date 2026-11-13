@@ -1,5 +1,7 @@
 import * as maplibregl from "maplibre-gl";
-import { useEffect, useRef } from "react";
+import type ShadeMap from "mapbox-gl-shadow-simulator";
+import { useEffect, useRef, useState } from "react";
+import { config } from "../config";
 import { BASE_MAP_STYLE, INITIAL_MAP_VIEW, INITIAL_MAP_ZOOM, MAP_STYLES } from "../map/mapConfig";
 import type { MapStyleName } from "../map/mapConfig";
 import { buildRouteShadeFeatures } from "../map/routeShadeSegments";
@@ -14,6 +16,8 @@ type MapViewProps = {
   mapStyle: MapStyleName;
   routes: PlannedRoute[];
   selectedRouteId: string | null;
+  shadowsEnabled: boolean;
+  shadowTime: string;
 };
 
 export function MapView({
@@ -25,11 +29,16 @@ export function MapView({
   mapStyle,
   routes,
   selectedRouteId,
+  shadowsEnabled,
+  shadowTime,
 }: MapViewProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const appliedMapStyleRef = useRef<MapStyleName>("default");
   const longPressTimerRef = useRef<ReturnType<typeof window.setTimeout> | null>(null);
   const longPressTriggeredRef = useRef(false);
+  const shadeMapRef = useRef<ShadeMap | null>(null);
+  const shadowTimeRef = useRef(shadowTime);
+  const [shadowStatus, setShadowStatus] = useState<"idle" | "ready" | "error">("idle");
 
   useEffect(() => {
     const container = containerRef.current;
@@ -113,6 +122,90 @@ export function MapView({
       appliedMapStyleRef.current = mapStyle;
     }
   }, [mapRef, mapStyle]);
+
+  useEffect(() => {
+    shadowTimeRef.current = shadowTime;
+    shadeMapRef.current?.setDate(new Date(shadowTime));
+  }, [shadowTime]);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !shadowsEnabled || !config.shadeMapApiKey) return;
+
+    let disposed = false;
+    let initializationTimer: ReturnType<typeof window.setTimeout> | null = null;
+    let initializationFrame: number | null = null;
+    let shadeMap: ShadeMap | null = null;
+    const handleSdkRejection = (event: PromiseRejectionEvent) => {
+      const message = event.reason instanceof Error ? event.reason.message : "";
+      if (!message.startsWith("Could not load ShadeMap API.")) return;
+      event.preventDefault();
+      if (initializationTimer !== null) window.clearTimeout(initializationTimer);
+      setShadowStatus("error");
+    };
+    window.addEventListener("unhandledrejection", handleSdkRejection);
+
+    const initializeShadeMap = async () => {
+      if (disposed || shadeMap || !map.isStyleLoaded()) return;
+      map.off("load", initializeShadeMap);
+      try {
+        const { default: ShadeMapSdk } = await import("mapbox-gl-shadow-simulator");
+        if (disposed || shadeMap || !map.isStyleLoaded()) return;
+        const currentShadeMap = new ShadeMapSdk({
+          apiKey: config.shadeMapApiKey,
+          date: new Date(shadowTimeRef.current),
+          color: "#142a3d",
+          opacity: 0.42,
+          getFeatures: async () =>
+            (map.getSource("openmaptiles")
+              ? map
+                  .querySourceFeatures("openmaptiles", { sourceLayer: "building" })
+                  .filter((feature) => {
+                    const properties = feature.properties;
+                    return (
+                      properties !== null &&
+                      properties.underground !== "true" &&
+                      (properties.height !== undefined || properties.render_height !== undefined)
+                    );
+                  })
+              : []) as unknown as Awaited<
+              ReturnType<NonNullable<ConstructorParameters<typeof ShadeMap>[0]["getFeatures"]>>
+            >,
+        });
+        shadeMap = currentShadeMap;
+        currentShadeMap.on("idle", () => {
+          if (!disposed && shadeMapRef.current === currentShadeMap) {
+            if (initializationTimer !== null) window.clearTimeout(initializationTimer);
+            setShadowStatus("ready");
+          }
+        });
+        shadeMapRef.current = currentShadeMap;
+        currentShadeMap.addTo(map as unknown as Parameters<typeof currentShadeMap.addTo>[0]);
+        if (initializationTimer !== null) window.clearTimeout(initializationTimer);
+        initializationTimer = window.setTimeout(() => {
+          if (!disposed) setShadowStatus("error");
+        }, 20_000);
+      } catch {
+        if (!disposed) setShadowStatus("error");
+      }
+    };
+
+    map.on("style.load", initializeShadeMap);
+    if (map.isStyleLoaded()) initializeShadeMap();
+    else map.once("load", initializeShadeMap);
+    initializationFrame = window.requestAnimationFrame(() => setShadowStatus("idle"));
+
+    return () => {
+      disposed = true;
+      map.off("style.load", initializeShadeMap);
+      map.off("load", initializeShadeMap);
+      if (initializationTimer !== null) window.clearTimeout(initializationTimer);
+      if (initializationFrame !== null) window.cancelAnimationFrame(initializationFrame);
+      window.removeEventListener("unhandledrejection", handleSdkRejection);
+      shadeMap?.remove();
+      if (shadeMapRef.current === shadeMap) shadeMapRef.current = null;
+    };
+  }, [mapRef, mapStyle, shadowsEnabled]);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -229,5 +322,23 @@ export function MapView({
     };
   }, [mapRef, routes, selectedRouteId, mapStyle]);
 
-  return <div ref={containerRef} className="maplibre-map" aria-label="Interactive map" />;
+  return (
+    <>
+      <div ref={containerRef} className="maplibre-map" aria-label="Interactive map" />
+      {shadowsEnabled && (
+        <div
+          className="absolute bottom-[calc(var(--sheet-height)+1rem)] left-4 z-[5] rounded-lg bg-white/95 px-3 py-2 text-xs font-semibold text-[#24435c] shadow-md sm:left-6"
+          role="status"
+          aria-live="polite"
+        >
+          {!config.shadeMapApiKey && "Configure a ShadeMap browser key to show shadows"}
+          {config.shadeMapApiKey && shadowStatus === "idle" && "Loading shadow data…"}
+          {config.shadeMapApiKey && shadowStatus === "ready" && "ShadeMap shadows loaded"}
+          {config.shadeMapApiKey &&
+            shadowStatus === "error" &&
+            "ShadeMap could not load shadows for this area"}
+        </div>
+      )}
+    </>
+  );
 }

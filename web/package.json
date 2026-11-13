@@ -16,6 +16,7 @@
     "test": "vitest"
   },
   "dependencies": {
+    "mapbox-gl-shadow-simulator": "^0.68.2",
     "maplibre-gl": "^6.17.0",
     "react": "^19.3.1",
     "react-dom": "^19.3.1"

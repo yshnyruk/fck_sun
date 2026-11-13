@@ -59,3 +59,19 @@ documentation or credentials, including:
 
 Until then, the backend must treat the current ShadeMap adapter as an unverified
 integration boundary and must not claim complete shade coverage.
+
+## Map rendering integration
+
+The official `mapbox-gl-shadow-simulator` SDK supports MapLibre and is the
+documented browser integration. Its browser initialization calls
+`POST https://shademap.app/sdk/load`; it does not provide the JSON viewport
+endpoint previously assumed by `ShadeMapAdapter`. The FckSun map uses this SDK
+for its current shadow overlay and reads building features from the active
+OpenFreeMap vector source when available. The SDK runs in the browser, so it
+requires a separate client key in `web/.env` as `VITE_SHADEMAP_API_KEY`. Never
+reuse or expose the server-only `SHADEMAP_API_KEY`.
+
+The configured frontend key was checked against the documented SDK load route
+on 2026-11-13 and received HTTP 403. The map therefore reports that ShadeMap
+could not load shadows until a valid browser SDK key is configured. This is an
+authentication result, not evidence that the SDK produced shade data.
