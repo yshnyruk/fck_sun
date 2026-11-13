@@ -1,3 +1,4 @@
+from datetime import UTC, datetime
 from typing import Annotated
 
 from api.core.config import get_settings
@@ -7,14 +8,20 @@ from api.integrations.graphhopper import (
     GraphHopperNoRouteError,
 )
 from api.integrations.graphhopper_geocoding import GraphHopperGeocodingError
-from api.integrations.shademap import ShadeMapAdapter
+from api.integrations.shademap import (
+    ShadeMapAdapter,
+    ShadeMapConfigurationError,
+    ShadeMapError,
+)
 from api.schemas.routes import RouteRequest, RouteResponse
 from api.schemas.search import LocationSearchResponse
+from api.schemas.shadows import ShadowRequest, ShadowResponse, ShadowViewport
 from api.services.location_search import (
     LocationSearchService,
     create_location_search_service,
 )
 from api.services.route_planning import RoutePlanningError, RoutePlanningService
+from api.services.viewport_shadows import ViewportShadowService
 from fastapi import APIRouter, Depends, Query
 from starlette.exceptions import HTTPException
 
@@ -36,6 +43,49 @@ def get_route_planning_service() -> RoutePlanningService:
 
 def get_location_search_service() -> LocationSearchService:
     return create_location_search_service(get_settings())
+
+
+def get_viewport_shadow_service() -> ViewportShadowService:
+    return ViewportShadowService(ShadeMapAdapter(get_settings()))
+
+
+@router.get("/shadows", response_model=ShadowResponse, tags=["shadows"])
+async def get_viewport_shadows(
+    service: Annotated[ViewportShadowService, Depends(get_viewport_shadow_service)],
+    west: Annotated[float, Query(ge=-180, le=180)],
+    south: Annotated[float, Query(ge=-90, le=90)],
+    east: Annotated[float, Query(ge=-180, le=180)],
+    north: Annotated[float, Query(ge=-90, le=90)],
+    time: Annotated[
+        datetime,
+        Query(description="Requested time as a UTC ISO 8601 timestamp."),
+    ],
+) -> ShadowResponse:
+    if time.tzinfo is None or time.utcoffset() != UTC.utcoffset(time):
+        raise HTTPException(
+            status_code=422,
+            detail="The time query parameter must be an ISO 8601 UTC timestamp.",
+        )
+    try:
+        request = ShadowRequest(
+            viewport=ShadowViewport(west=west, south=south, east=east, north=north),
+            requested_time=time,
+        )
+    except ValueError as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error
+
+    try:
+        return await service.get_shadows(request)
+    except ShadeMapConfigurationError as error:
+        raise HTTPException(
+            status_code=503,
+            detail="Viewport shadow data is not configured.",
+        ) from error
+    except ShadeMapError as error:
+        raise HTTPException(
+            status_code=502,
+            detail="Viewport shadow provider is unavailable or returned invalid data.",
+        ) from error
 
 
 @router.post("/routes", response_model=RouteResponse, tags=["routes"])
