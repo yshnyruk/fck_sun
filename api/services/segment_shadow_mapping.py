@@ -1,5 +1,6 @@
 """Associate time-aware shadow responses with ordered route segments."""
 
+import asyncio
 from datetime import UTC, datetime
 from typing import Protocol
 
@@ -38,7 +39,31 @@ async def map_shadows_to_segments(
         raise SegmentShadowMappingError("Route segment identifiers must be unique")
 
     cache: dict[tuple[float, float, datetime], ShadowResponse | Exception] = {}
-    results: list[SegmentShadow] = []
+    semaphore = asyncio.Semaphore(8)
+
+    async def map_one(segment: RouteSegment, evaluated_time: datetime) -> SegmentShadow:
+        location = _segment_midpoint(segment)
+        cache_key = (location.latitude, location.longitude, evaluated_time)
+        cached = cache.get(cache_key)
+        if cached is None:
+            request = _shadow_request(location, evaluated_time)
+            async with semaphore:
+                try:
+                    cached = await provider.get_shadows(request)
+                except ShadowProviderError as error:
+                    cached = error
+            cache[cache_key] = cached
+
+        if isinstance(cached, ShadowResponse):
+            return _map_response(segment.id, location, evaluated_time, cached)
+        return _unknown_result(
+            segment.id,
+            location,
+            evaluated_time,
+            f"ShadeMap request failed: {type(cached).__name__}",
+        )
+
+    tasks: list[asyncio.Task[SegmentShadow]] = []
     for arrival in timing.segment_arrivals:
         segment = segments_by_id.get(arrival.segment_id)
         if segment is None:
@@ -46,30 +71,9 @@ async def map_shadows_to_segments(
                 f"Timing references unknown route segment {arrival.segment_id}"
             )
 
-        location = _segment_midpoint(segment)
         evaluated_time = arrival.expected_arrival.astimezone(UTC)
-        cache_key = (location.latitude, location.longitude, evaluated_time)
-        cached = cache.get(cache_key)
-        if cached is None:
-            request = _shadow_request(location, evaluated_time)
-            try:
-                cached = await provider.get_shadows(request)
-            except ShadowProviderError as error:
-                cached = error
-            cache[cache_key] = cached
-
-        if isinstance(cached, ShadowResponse):
-            results.append(_map_response(segment.id, location, evaluated_time, cached))
-        else:
-            results.append(
-                _unknown_result(
-                    segment.id,
-                    location,
-                    evaluated_time,
-                    f"ShadeMap request failed: {type(cached).__name__}",
-                )
-            )
-    return results
+        tasks.append(asyncio.create_task(map_one(segment, evaluated_time)))
+    return list(await asyncio.gather(*tasks))
 
 
 def _shadow_request(location: Coordinate, evaluated_time: datetime) -> ShadowRequest:

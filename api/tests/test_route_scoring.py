@@ -134,6 +134,30 @@ def test_select_recommended_route_omits_near_duplicate_alternatives() -> None:
     assert alternatives[0].score is not None
 
 
+def test_select_recommended_route_keeps_distinct_provider_geometry() -> None:
+    routes = [
+        route("recommended", 1000, 1000),
+        route("alternative", 1020, 1020).model_copy(
+            update={
+                "geometry": LineStringGeometry(coordinates=[(0, 0), (0.01, 0), (0.01, 0.01)])
+            }
+        ),
+    ]
+    coverages = {
+        "recommended": coverage(500, confidence=CoverageConfidence.INSUFFICIENT),
+        "alternative": coverage(500, confidence=CoverageConfidence.INSUFFICIENT),
+    }
+
+    recommended, alternatives = select_recommended_route(
+        routes,
+        coverages,
+        ShadePreference.MEDIUM,
+    )
+
+    assert recommended.id == "recommended"
+    assert [item.id for item in alternatives] == ["alternative"]
+
+
 def test_shade_difference_makes_equal_metric_route_meaningful() -> None:
     routes = [route("recommended", 1000, 1000), route("shadier", 1000, 1000)]
     coverages = {

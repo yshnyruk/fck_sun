@@ -51,6 +51,7 @@ async def graphhopper_client() -> AsyncIterator[httpx.AsyncClient]:
         assert request.url.path == "/route"
         assert request.url.params.get_list("point") == ["40.7,-74.0", "40.71,-73.99"]
         assert request.url.params["profile"] == "foot"
+        assert request.url.params["algorithm"] == "alternative_route"
         assert request.url.params["points_encoded"] == "false"
         return httpx.Response(200, json=graphhopper_response())
 
@@ -87,6 +88,7 @@ async def test_adapter_normalizes_graphhopper_routes(
 @pytest.mark.anyio
 async def test_adapter_returns_available_alternative_routes() -> None:
     async def handler(request: httpx.Request) -> httpx.Response:
+        assert request.url.params["algorithm"] == "alternative_route"
         assert request.url.params["alternative_route.max_paths"] == "3"
         return httpx.Response(200, json=graphhopper_alternatives_response())
 

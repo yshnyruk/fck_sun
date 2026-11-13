@@ -146,7 +146,8 @@ def _is_meaningful_alternative(
     recommended_shade = _shade_ratio(recommended, coverages)
     shade_difference = abs(candidate_shade - recommended_shade)
     return (
-        distance_difference >= MIN_ALTERNATIVE_DISTANCE_DIFFERENCE
+        candidate.geometry.coordinates != recommended.geometry.coordinates
+        or distance_difference >= MIN_ALTERNATIVE_DISTANCE_DIFFERENCE
         or duration_difference >= MIN_ALTERNATIVE_DURATION_DIFFERENCE
         or shade_difference >= MIN_ALTERNATIVE_SHADE_DIFFERENCE
     )

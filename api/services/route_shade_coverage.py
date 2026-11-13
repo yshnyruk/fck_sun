@@ -3,7 +3,13 @@
 from collections.abc import Mapping
 
 from api.schemas.route_coverage import RouteShadeCoverage, ShadeCoverageThresholds
-from api.schemas.routes import CoverageConfidence, Route, ShadeClassification, ShadeEstimate
+from api.schemas.routes import (
+    CoverageConfidence,
+    Route,
+    ShadeClassification,
+    ShadeEstimate,
+    ShadeSegment,
+)
 from api.schemas.segment_shadows import SegmentShadow
 from api.schemas.segments import RouteSegment
 
@@ -67,15 +73,41 @@ def calculate_route_shade_coverage(
     )
 
 
-def attach_route_shade_coverage(route: Route, coverage: RouteShadeCoverage) -> Route:
+def attach_route_shade_coverage(
+    route: Route,
+    coverage: RouteShadeCoverage,
+    segments: list[RouteSegment] | None = None,
+    shadows: list[SegmentShadow] | None = None,
+) -> Route:
     """Attach normalized coverage metadata while preserving the pedestrian route."""
+    shadows_by_id = {shadow.segment_id: shadow for shadow in shadows or []}
+    shade_segments = [
+        ShadeSegment(
+            start_distance_m=segment.start_distance_m,
+            end_distance_m=segment.end_distance_m,
+            classification=(
+                shadows_by_id[segment.id].classification
+                if segment.id in shadows_by_id and shadows_by_id[segment.id].data_available
+                else ShadeClassification.UNKNOWN
+            ),
+            coverage_confidence=(
+                shadows_by_id[segment.id].coverage_confidence
+                if segment.id in shadows_by_id
+                else CoverageConfidence.INSUFFICIENT
+            ),
+        )
+        for segment in segments or []
+    ]
     return route.model_copy(
         update={
             "coverage_confidence": coverage.coverage_confidence,
             "shade": ShadeEstimate(
-                shade_coverage_percent=coverage.shaded_percentage,
+                shade_coverage_percent=(
+                    coverage.shaded_percentage if coverage.usable_percentage > 0 else None
+                ),
                 classified_distance_m=(coverage.shaded_distance_m + coverage.exposed_distance_m),
                 unknown_distance_m=coverage.unknown_distance_m,
+                segments=shade_segments,
             ),
         }
     )

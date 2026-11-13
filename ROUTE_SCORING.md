@@ -100,13 +100,15 @@ Retain alternatives that are meaningful pedestrian routes even when their
 score is lower. An alternative is meaningful when it differs from the
 recommendation by at least one of:
 
+- distinct route geometry returned by the provider's alternative-route algorithm;
 - 10% in provider walking distance;
 - 10% in provider estimated duration; or
 - 10 percentage points in confirmed shade coverage.
 
-Routes that differ only trivially in all three metrics are omitted as
-duplicates. Every retained alternative keeps its own route geometry, distance,
-duration, shade coverage, confidence, and score. For equal scores, prefer, in order:
+Routes with identical geometry that differ only trivially in all three metrics
+are omitted as duplicates. Every retained alternative keeps its own route
+geometry, distance, duration, shade coverage, confidence, and score. For equal
+scores, prefer, in order:
 
 1. Higher `coverage_confidence` (`high`, then `partial`, then
    `insufficient`).

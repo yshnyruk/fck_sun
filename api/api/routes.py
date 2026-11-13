@@ -7,6 +7,7 @@ from api.integrations.graphhopper import (
     GraphHopperNoRouteError,
 )
 from api.integrations.graphhopper_geocoding import GraphHopperGeocodingError
+from api.integrations.shademap import ShadeMapAdapter
 from api.schemas.routes import RouteRequest, RouteResponse
 from api.schemas.search import LocationSearchResponse
 from api.services.location_search import (
@@ -26,7 +27,11 @@ def health_check() -> dict[str, str]:
 
 
 def get_route_planning_service() -> RoutePlanningService:
-    return RoutePlanningService(GraphHopperAdapter(get_settings()))
+    settings = get_settings()
+    return RoutePlanningService(
+        GraphHopperAdapter(settings),
+        ShadeMapAdapter(settings),
+    )
 
 
 def get_location_search_service() -> LocationSearchService:

@@ -11,8 +11,10 @@ from api.schemas.routes import (
     Route,
     RouteRequest,
     RouteResponse,
+    ShadeClassification,
     ShadeEstimate,
 )
+from api.schemas.shadows import ShadowRequest, ShadowResponse, ShadowSample
 from api.services.route_planning import RoutePlanningError, RoutePlanningService
 
 
@@ -57,13 +59,17 @@ async def test_route_planning_service_returns_recommended_route_and_alternatives
     assert response.alternatives[0].id == "route-2"
     assert response.recommended_route.score is not None
     assert response.alternatives[0].score is not None
-    assert response.recommended_route.shade is None
-    assert response.alternatives[0].shade is None
+    assert response.recommended_route.shade is not None
+    assert response.recommended_route.shade.shade_coverage_percent is None
+    assert response.recommended_route.shade.unknown_distance_m == 1250
+    assert response.recommended_route.shade.segments
+    assert response.alternatives[0].shade is not None
+    assert response.alternatives[0].shade.shade_coverage_percent is None
     assert response.recommended_route.coverage_confidence is CoverageConfidence.INSUFFICIENT
 
 
 @pytest.mark.anyio
-async def test_route_planning_preserves_routes_without_unsupported_shade_estimates() -> None:
+async def test_route_planning_discards_unverified_provider_shade_estimates() -> None:
     class StubAdapter:
         async def get_routes(
             self,
@@ -91,8 +97,58 @@ async def test_route_planning_preserves_routes_without_unsupported_shade_estimat
     assert response.recommended_route.id == "route-without-shade-data"
     assert response.recommended_route.distance_m == 1250
     assert response.recommended_route.duration_s == 900
-    assert response.recommended_route.shade is None
+    assert response.recommended_route.shade is not None
+    assert response.recommended_route.shade.shade_coverage_percent is None
+    assert response.recommended_route.shade.unknown_distance_m == 1250
     assert response.recommended_route.coverage_confidence is CoverageConfidence.INSUFFICIENT
+
+
+@pytest.mark.anyio
+async def test_route_planning_attaches_time_aware_shade_partitions() -> None:
+    class StubAdapter:
+        async def get_routes(
+            self,
+            origin: Coordinate,
+            destination: Coordinate,
+            *,
+            max_paths: int = 3,
+        ) -> list[Route]:
+            return [build_route("route-with-shade", 1250)]
+
+    class StubShadeProvider:
+        async def get_shadows(self, request: ShadowRequest) -> ShadowResponse:
+            latitude = (request.viewport.south + request.viewport.north) / 2
+            longitude = (request.viewport.west + request.viewport.east) / 2
+            return ShadowResponse(
+                viewport=request.viewport,
+                requested_time=request.requested_time,
+                coverage_confidence=CoverageConfidence.HIGH,
+                samples=[
+                    ShadowSample(
+                        location=Coordinate(latitude=latitude, longitude=longitude),
+                        classification=ShadeClassification.CONFIRMED_SHADE,
+                        evaluated_time=request.requested_time,
+                    )
+                ],
+            )
+
+    response = await RoutePlanningService(StubAdapter(), StubShadeProvider()).plan(
+        RouteRequest(
+            origin=Coordinate(latitude=40.7, longitude=-74.0),
+            destination=Coordinate(latitude=40.71, longitude=-73.99),
+        )
+    )
+
+    route = response.recommended_route
+    assert route.shade is not None
+    assert route.shade.shade_coverage_percent == 100
+    assert route.shade.unknown_distance_m == 0
+    assert len(route.shade.segments) > 1
+    assert all(
+        segment.classification is ShadeClassification.CONFIRMED_SHADE
+        for segment in route.shade.segments
+    )
+    assert route.coverage_confidence is CoverageConfidence.HIGH
 
 
 @pytest.mark.anyio

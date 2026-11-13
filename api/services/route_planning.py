@@ -5,12 +5,19 @@ from typing import Protocol
 from api.schemas.route_coverage import RouteShadeCoverage
 from api.schemas.routes import (
     Coordinate,
-    CoverageConfidence,
     Route,
     RouteRequest,
     RouteResponse,
 )
+from api.schemas.segments import RouteSegment
 from api.services.route_scoring import select_recommended_route
+from api.services.route_segmentation import segment_route_geometry
+from api.services.route_shade_coverage import (
+    attach_route_shade_coverage,
+    calculate_route_shade_coverage,
+)
+from api.services.segment_shadow_mapping import SegmentShadowProvider, map_shadows_to_segments
+from api.services.segment_timing import calculate_segment_arrival_times
 
 
 class RoutePlanningError(Exception):
@@ -30,8 +37,13 @@ class RouteProvider(Protocol):
 class RoutePlanningService:
     """Generate pedestrian routes through the configured routing provider."""
 
-    def __init__(self, adapter: RouteProvider) -> None:
+    def __init__(
+        self,
+        adapter: RouteProvider,
+        shadow_provider: SegmentShadowProvider | None = None,
+    ) -> None:
         self._adapter = adapter
+        self._shadow_provider = shadow_provider
 
     async def plan(self, request: RouteRequest) -> RouteResponse:
         provider_routes = await self._adapter.get_routes(
@@ -40,8 +52,22 @@ class RoutePlanningService:
         )
         if not provider_routes:
             raise RoutePlanningError("No pedestrian route was returned by the routing provider")
-        routes = [_route_without_unsupported_shade(route) for route in provider_routes]
-        coverages = {route.id: _coverage_for_route(route) for route in routes}
+        routes: list[Route] = []
+        coverages: dict[str, RouteShadeCoverage] = {}
+        for route in provider_routes:
+            segments = _segments_for_route(route)
+            if self._shadow_provider is None:
+                shadows = []
+            else:
+                timing = calculate_segment_arrival_times(route, segments, request)
+                shadows = await map_shadows_to_segments(
+                    segments,
+                    timing,
+                    self._shadow_provider,
+                )
+            coverage = calculate_route_shade_coverage(segments, shadows)
+            routes.append(attach_route_shade_coverage(route, coverage, segments, shadows))
+            coverages[route.id] = coverage
         recommended_route, alternatives = select_recommended_route(
             routes,
             coverages,
@@ -53,26 +79,20 @@ class RoutePlanningService:
         )
 
 
-def _route_without_unsupported_shade(route: Route) -> Route:
-    """Keep pedestrian metrics while removing unverified shade estimates."""
-    return route.model_copy(
-        update={
-            "shade": None,
-            "coverage_confidence": CoverageConfidence.INSUFFICIENT,
-        }
-    )
-
-
-def _coverage_for_route(route: Route) -> RouteShadeCoverage:
-    """Represent unavailable provider shade data without inferring exposure."""
-    return RouteShadeCoverage(
-        total_distance_m=route.distance_m,
-        shaded_distance_m=0,
-        exposed_distance_m=0,
-        unknown_distance_m=route.distance_m,
-        shaded_percentage=0,
-        exposed_percentage=0,
-        unknown_percentage=100,
-        usable_percentage=0,
-        coverage_confidence=CoverageConfidence.INSUFFICIENT,
-    )
+def _segments_for_route(route: Route) -> list[RouteSegment]:
+    """Segment the geometry and scale intervals to provider distance metrics."""
+    segments = segment_route_geometry(route.geometry)
+    geometry_distance = segments[-1].end_distance_m
+    if geometry_distance <= 0:
+        raise RoutePlanningError("Route geometry has no measurable distance")
+    distance_scale = route.distance_m / geometry_distance
+    return [
+        segment.model_copy(
+            update={
+                "distance_m": segment.distance_m * distance_scale,
+                "start_distance_m": segment.start_distance_m * distance_scale,
+                "end_distance_m": segment.end_distance_m * distance_scale,
+            }
+        )
+        for segment in segments
+    ]

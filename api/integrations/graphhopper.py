@@ -100,6 +100,7 @@ class GraphHopperAdapter:
             ("point", f"{origin.latitude},{origin.longitude}"),
             ("point", f"{destination.latitude},{destination.longitude}"),
             ("profile", "foot"),
+            ("algorithm", "alternative_route"),
             ("points_encoded", "false"),
             ("instructions", "false"),
             ("alternative_route.max_paths", str(max_paths)),
