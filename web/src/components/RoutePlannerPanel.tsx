@@ -34,76 +34,10 @@ type RoutePlannerPanelProps = {
   requestError: string | null;
   navigationStarted: boolean;
   routes: RoutePlanningResponse | null;
-  selectedRouteId: string | null;
-  onSelectRoute: (route: RoutePlanningResponse["recommended_route"]) => void;
   onStartNavigation: () => void;
   onCloseDestination: () => void;
   onPlanningInputChange: () => void;
 };
-
-function RouteSummary({
-  route,
-  recommended = false,
-  label,
-  selected = false,
-  onSelect,
-}: {
-  route: RoutePlanningResponse["recommended_route"];
-  recommended?: boolean;
-  label?: string;
-  selected?: boolean;
-  onSelect: () => void;
-}) {
-  const distance =
-    route.distance_m >= 1000
-      ? `${(route.distance_m / 1000).toFixed(1)} km`
-      : `${Math.round(route.distance_m)} m`;
-  const durationMinutes = Math.round(route.duration_s / 60);
-  const shadePercent = route.shade?.shade_coverage_percent;
-  const confidence =
-    route.coverage_confidence === "high"
-      ? "High"
-      : route.coverage_confidence === "partial"
-        ? "Partial"
-        : "Insufficient";
-  const confidenceNote =
-    route.coverage_confidence === "high"
-      ? "Shade estimates cover most of this route."
-      : route.coverage_confidence === "partial"
-        ? "Some segments have unknown shade and are not counted as exposed."
-        : "Shade data is too limited for reliable shade guidance on this route.";
-
-  return (
-    <button
-      type="button"
-      className={`route-summary ${selected ? "selected" : ""}`}
-      aria-pressed={selected}
-      onClick={onSelect}
-    >
-      <div className="route-summary-heading">
-        <strong>{recommended ? "Recommended route" : label}</strong>
-        <span>
-          {distance} · {durationMinutes} min
-        </span>
-      </div>
-      <p className="route-summary-coverage">
-        <span>Overall shade coverage</span>
-        <strong>
-          {shadePercent === null || shadePercent === undefined
-            ? "Unavailable"
-            : `${Math.round(shadePercent)}%`}
-        </strong>
-      </p>
-      <p className="route-summary-confidence">Shade data coverage: {confidence}</p>
-      <p className="route-summary-confidence-note">{confidenceNote}</p>
-      {route.shade && route.shade.unknown_distance_m > 0 && (
-        <p className="route-summary-unknown">
-          Shade unknown for {Math.round(route.shade.unknown_distance_m)} m of this route
-        </p>
-      )}
-    </button>
-  );
-}
 
 export function RoutePlannerPanel({
   destination,
@@ -126,22 +60,10 @@ export function RoutePlannerPanel({
   requestError,
   navigationStarted,
   routes,
-  selectedRouteId,
-  onSelectRoute,
   onStartNavigation,
   onCloseDestination,
   onPlanningInputChange,
 }: RoutePlannerPanelProps) {
-  const availableRoutes = routes ? [routes.recommended_route, ...routes.alternatives] : [];
-  const selectedRoute = availableRoutes.find((route) => route.id === selectedRouteId);
-  const selectedAlternativeIndex =
-    routes?.alternatives.findIndex((route) => route.id === selectedRoute?.id) ?? -1;
-  const selectedRouteLabel = selectedRoute
-    ? selectedAlternativeIndex < 0
-      ? "Recommended route"
-      : `Alternative ${selectedAlternativeIndex + 1}`
-    : null;
-
   return (
     <div className="route-planner">
       <div className="route-planner-header">
@@ -270,91 +192,7 @@ export function RoutePlannerPanel({
         </p>
       )}
       {routes && (
-        <section className="planned-routes" aria-label="Available routes" aria-live="polite">
-          {selectedRoute && (
-            <section
-              className="selected-route-details"
-              aria-label="Selected route details"
-              aria-live="polite"
-            >
-              <h3>{selectedRouteLabel} details</h3>
-              <dl>
-                <div>
-                  <dt>Distance</dt>
-                  <dd>
-                    {selectedRoute.distance_m >= 1000
-                      ? `${(selectedRoute.distance_m / 1000).toFixed(1)} km`
-                      : `${Math.round(selectedRoute.distance_m)} m`}
-                  </dd>
-                </div>
-                <div>
-                  <dt>Estimated walking time</dt>
-                  <dd>{Math.round(selectedRoute.duration_s / 60)} min</dd>
-                </div>
-                <div>
-                  <dt>Selected route shade coverage</dt>
-                  <dd>
-                    {selectedRoute.shade?.shade_coverage_percent == null
-                      ? "Unavailable"
-                      : `${Math.round(selectedRoute.shade.shade_coverage_percent)}%`}
-                  </dd>
-                </div>
-                <div>
-                  <dt>Shade data coverage</dt>
-                  <dd>
-                    {selectedRoute.coverage_confidence === "high"
-                      ? "High"
-                      : selectedRoute.coverage_confidence === "partial"
-                        ? "Partial"
-                        : "Insufficient"}
-                  </dd>
-                </div>
-              </dl>
-              <p>
-                {selectedRoute.coverage_confidence === "high"
-                  ? "Shade estimates cover most of this route."
-                  : selectedRoute.coverage_confidence === "partial"
-                    ? "Some segments have unknown shade and are not counted as exposed."
-                    : "Shade data is too limited for reliable shade guidance on this route."}
-              </p>
-              {selectedRoute.shade && selectedRoute.shade.unknown_distance_m > 0 && (
-                <p className="selected-route-unknown">
-                  Shade unknown for {Math.round(selectedRoute.shade.unknown_distance_m)} m of this
-                  route
-                </p>
-              )}
-            </section>
-          )}
-          <RouteSummary
-            route={routes.recommended_route}
-            recommended
-            selected={selectedRouteId === routes.recommended_route.id}
-            onSelect={() => onSelectRoute(routes.recommended_route)}
-          />
-          {routes.alternatives.map((route, index) => (
-            <RouteSummary
-              key={route.id}
-              route={route}
-              label={`Alternative ${index + 1}`}
-              selected={selectedRouteId === route.id}
-              onSelect={() => onSelectRoute(route)}
-            />
-          ))}
-          <div className="route-shade-legend" aria-label="Route segment shade legend">
-            <span>
-              <i className="shaded" aria-hidden="true" />
-              Shaded
-            </span>
-            <span>
-              <i className="exposed" aria-hidden="true" />
-              Exposed
-            </span>
-            <span>
-              <i className="unknown" aria-hidden="true" />
-              Unknown
-            </span>
-          </div>
-        </section>
+        <p className="route-map-hint" role="status">Tap a route on the map to select it.</p>
       )}
     </div>
   );

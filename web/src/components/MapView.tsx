@@ -13,9 +13,11 @@ type MapViewProps = {
   onMapShortPress: () => void;
   onMapDragStart: () => void;
   onMapReady: () => void;
+  onSelectRoute: (routeId: string) => void;
   mapStyle: MapStyleName;
   routes: PlannedRoute[];
   selectedRouteId: string | null;
+  routeArrivalTimes: Record<string, string>;
   shadowsEnabled: boolean;
   shadowTime: string;
 };
@@ -26,9 +28,11 @@ export function MapView({
   onMapShortPress,
   onMapDragStart,
   onMapReady,
+  onSelectRoute,
   mapStyle,
   routes,
   selectedRouteId,
+  routeArrivalTimes,
   shadowsEnabled,
   shadowTime,
 }: MapViewProps) {
@@ -38,6 +42,8 @@ export function MapView({
   const longPressTriggeredRef = useRef(false);
   const shadeMapRef = useRef<ShadeMap | null>(null);
   const shadowTimeRef = useRef(shadowTime);
+  const onSelectRouteRef = useRef(onSelectRoute);
+  onSelectRouteRef.current = onSelectRoute;
   const [shadowStatus, setShadowStatus] = useState<"idle" | "ready" | "error">("idle");
 
   useEffect(() => {
@@ -77,10 +83,26 @@ export function MapView({
         onMapLongPress(location);
       }, 650);
     };
-    const handleMapClick = () => {
+    const handleMapClick = (event: maplibregl.MapMouseEvent) => {
       if (longPressTriggeredRef.current) {
         longPressTriggeredRef.current = false;
         return;
+      }
+      const clickableLayers = [
+        "planned-route-selected-casing",
+        "planned-route-shade-segments",
+        "planned-route-exposure-segments",
+        "planned-route-unknown-segments",
+        "planned-route-alternative-line",
+        "planned-route-alternative-casing",
+      ].filter((layer) => map.getLayer(layer));
+      if (clickableLayers.length > 0) {
+        const routeFeature = map.queryRenderedFeatures(event.point, { layers: clickableLayers })[0];
+        const routeId = routeFeature?.properties?.route_id;
+        if (typeof routeId === "string") {
+          onSelectRouteRef.current(routeId);
+          return;
+        }
       }
       onMapShortPress();
     };
@@ -212,6 +234,7 @@ export function MapView({
     if (!map) return;
 
     let rendered = false;
+    let arrivalMarkers: maplibregl.Marker[] = [];
     const renderRoutes = () => {
       if (rendered || !map.isStyleLoaded()) return;
       rendered = true;
@@ -225,6 +248,8 @@ export function MapView({
       ]) {
         if (map.getLayer(layerId)) map.removeLayer(layerId);
       }
+      arrivalMarkers.forEach((marker) => marker.remove());
+      arrivalMarkers = [];
       if (map.getSource("planned-route-segments")) map.removeSource("planned-route-segments");
       if (map.getSource("planned-routes")) map.removeSource("planned-routes");
       if (routes.length === 0 || !selectedRouteId) return;
@@ -246,7 +271,10 @@ export function MapView({
         type: "geojson",
         data: {
           type: "FeatureCollection",
-          features: buildRouteShadeFeatures(selectedRoute),
+          features: buildRouteShadeFeatures(selectedRoute).map((feature) => ({
+            ...feature,
+            properties: { ...feature.properties, route_id: selectedRoute.id },
+          })),
         },
       });
       map.addLayer({
@@ -257,6 +285,24 @@ export function MapView({
         layout: { "line-cap": "round", "line-join": "round" },
         paint: { "line-color": "#ffffff", "line-width": 8, "line-opacity": 0.88 },
       });
+
+      for (const route of routes) {
+        const coordinates = route.geometry.coordinates;
+        const midpoint = coordinates[Math.floor(coordinates.length / 2)];
+        const arrival = routeArrivalTimes[route.id];
+        if (!midpoint || !arrival) continue;
+        const formattedArrival = new Intl.DateTimeFormat(undefined, {
+          hour: "numeric",
+          minute: "2-digit",
+        }).format(new Date(arrival));
+        const element = document.createElement("div");
+        element.className = `route-arrival-marker${
+          route.id === selectedRouteId ? " selected" : ""
+        }`;
+        element.setAttribute("aria-label", `Estimated arrival ${formattedArrival}`);
+        element.innerHTML = `<span class="route-arrival-balloon" aria-hidden="true">🎈</span><span class="route-arrival-time">${formattedArrival}</span>`;
+        arrivalMarkers.push(new maplibregl.Marker({ element, anchor: "bottom" }).setLngLat(midpoint).addTo(map));
+      }
       map.addLayer({
         id: "planned-route-alternative-line",
         type: "line",
@@ -319,8 +365,9 @@ export function MapView({
       map.off("style.load", renderRoutes);
       map.off("load", renderRoutes);
       map.off("render", renderRoutes);
+      arrivalMarkers.forEach((marker) => marker.remove());
     };
-  }, [mapRef, routes, selectedRouteId, mapStyle]);
+  }, [mapRef, routes, selectedRouteId, routeArrivalTimes, mapStyle]);
 
   return (
     <>

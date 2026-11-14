@@ -464,6 +464,25 @@ function App() {
     () => (plannedRoutes ? [plannedRoutes.recommended_route, ...plannedRoutes.alternatives] : []),
     [plannedRoutes],
   );
+  const routeArrivalTimes = useMemo(() => {
+    const plannedStart =
+      planningMode === "depart_at"
+        ? new Date(departureDateTime)
+        : planningMode === "arrive_by"
+          ? new Date(arrivalDateTime)
+          : new Date();
+    if (!Number.isFinite(plannedStart.getTime())) return {};
+    return Object.fromEntries(
+      routeOptions.map((route) => [
+        route.id,
+        new Date(
+          planningMode === "arrive_by"
+            ? plannedStart.getTime()
+            : plannedStart.getTime() + route.duration_s * 1000,
+        ).toISOString(),
+      ]),
+    );
+  }, [routeOptions, planningMode, departureDateTime, arrivalDateTime]);
 
   const formattedTime = `${String(Math.floor(time)).padStart(2, "0")}:${time % 1 ? "30" : "00"}`;
   const shadowTime = useMemo(() => {
@@ -693,9 +712,15 @@ function App() {
           onMapShortPress={handleMapShortPress}
           onMapDragStart={resetExpandedMapControls}
           onMapReady={focusCurrentLocation}
+          onSelectRoute={(routeId) => {
+            if (!routeOptions.some((route) => route.id === routeId)) return;
+            setSelectedRouteId(routeId);
+            setNavigationStarted(false);
+          }}
           mapStyle={mapStyle}
           routes={routeOptions}
           selectedRouteId={selectedRouteId}
+          routeArrivalTimes={routeArrivalTimes}
           shadowsEnabled={shadowsEnabled}
           shadowTime={shadowTime}
         />
@@ -939,11 +964,6 @@ function App() {
               requestError={routeRequestError}
               navigationStarted={navigationStarted}
               routes={plannedRoutes}
-              selectedRouteId={selectedRouteId}
-              onSelectRoute={(route) => {
-                setSelectedRouteId(route.id);
-                setNavigationStarted(false);
-              }}
               onStartNavigation={() => void startNavigation()}
               onCloseDestination={() => {
                 destinationMarkerRef.current?.remove();
