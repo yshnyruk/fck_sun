@@ -17,6 +17,7 @@ type MapViewProps = {
   mapStyle: MapStyleName;
   routes: PlannedRoute[];
   selectedRouteId: string | null;
+  navigationLocation: [number, number] | null;
   routeArrivalTimes: Record<string, string>;
   shadowsEnabled: boolean;
   shadowTime: string;
@@ -32,6 +33,7 @@ export function MapView({
   mapStyle,
   routes,
   selectedRouteId,
+  navigationLocation,
   routeArrivalTimes,
   shadowsEnabled,
   shadowTime,
@@ -41,10 +43,33 @@ export function MapView({
   const longPressTimerRef = useRef<ReturnType<typeof window.setTimeout> | null>(null);
   const longPressTriggeredRef = useRef(false);
   const shadeMapRef = useRef<ShadeMap | null>(null);
+  const navigationMarkerRef = useRef<maplibregl.Marker | null>(null);
   const shadowTimeRef = useRef(shadowTime);
   const onSelectRouteRef = useRef(onSelectRoute);
-  onSelectRouteRef.current = onSelectRoute;
   const [shadowStatus, setShadowStatus] = useState<"idle" | "ready" | "error">("idle");
+
+  useEffect(() => {
+    onSelectRouteRef.current = onSelectRoute;
+  }, [onSelectRoute]);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!navigationLocation || !map) {
+      navigationMarkerRef.current?.remove();
+      navigationMarkerRef.current = null;
+      return;
+    }
+    if (!navigationMarkerRef.current) {
+      const element = document.createElement("div");
+      element.className = "navigation-location-marker";
+      element.setAttribute("aria-label", "Your live location on the selected route");
+      navigationMarkerRef.current = new maplibregl.Marker({ element, anchor: "center" })
+        .setLngLat(navigationLocation)
+        .addTo(map);
+    }
+    navigationMarkerRef.current.setLngLat(navigationLocation);
+    map.easeTo({ center: navigationLocation, duration: 350, essential: true });
+  }, [mapRef, navigationLocation]);
 
   useEffect(() => {
     const container = containerRef.current;

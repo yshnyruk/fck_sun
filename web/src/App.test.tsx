@@ -76,6 +76,22 @@ beforeEach(() => {
           timestamp: Date.now(),
         } as GeolocationPosition);
       },
+      watchPosition: (success: PositionCallback) => {
+        success({
+          coords: {
+            latitude: 40.75,
+            longitude: -73.98,
+            accuracy: 10,
+            altitude: null,
+            altitudeAccuracy: null,
+            heading: null,
+            speed: null,
+          },
+          timestamp: Date.now(),
+        } as GeolocationPosition);
+        return 1;
+      },
+      clearWatch: () => undefined,
     },
   });
 });
@@ -251,9 +267,11 @@ describe("FckSun frontend", () => {
     } as Response);
     expect(await screen.findByText("Recommended route")).toBeDefined();
     fireEvent.click(screen.getByRole("button", { name: "Start navigation" }));
-    expect((await screen.findByRole("button", { name: "Navigation started" })).textContent).toBe(
-      "Navigation started",
+    expect((await screen.findByRole("button", { name: "End navigation" })).textContent).toBe(
+      "End navigation",
     );
+    expect(screen.getByRole("region", { name: "Navigation progress" })).toBeDefined();
+    expect(screen.getByText(/1.2 km remaining/)).toBeDefined();
     expect(screen.getByText(/1.2 km · 15 min/)).toBeDefined();
     expect(screen.getByText("Overall shade coverage")).toBeDefined();
     const selectedRouteDetails = within(
@@ -306,7 +324,7 @@ describe("FckSun frontend", () => {
     expect(screen.getByText("Device location")).toBeDefined();
     await screen.findByText("Recommended route");
     fireEvent.click(screen.getByRole("button", { name: "Start navigation" }));
-    await screen.findByRole("button", { name: "Navigation started" });
+    await screen.findByRole("button", { name: "End navigation" });
     const routeRequest = fetchMock.mock.calls
       .filter(([input]) => String(input).endsWith("/routes/candidates"))
       .at(-1);
@@ -368,7 +386,7 @@ describe("FckSun frontend", () => {
     );
     await screen.findByText("Recommended route");
     fireEvent.click(screen.getByRole("button", { name: "Start navigation" }));
-    await screen.findByRole("button", { name: "Navigation started" });
+    await screen.findByRole("button", { name: "End navigation" });
 
     const routeRequest = fetchMock.mock.calls
       .filter(([input]) => String(input).endsWith("/routes/candidates"))
@@ -494,15 +512,12 @@ describe("FckSun frontend", () => {
 
     render(<App />);
     await selectCentralPark();
-    fireEvent.click(screen.getByRole("button", { name: /Start navigation/ }));
-
-    expect((await screen.findByRole("alert")).textContent).toBe(
-      "Choose a starting location before planning a route.",
-    );
+    expect((screen.getByRole("button", { name: /Start navigation/ }) as HTMLButtonElement).disabled)
+      .toBe(true);
     const routeRequests = fetchMock.mock.calls
       .filter(([input]) => String(input).endsWith("/routes/candidates"))
       .map(([, init]) => JSON.parse(String(init?.body)) as { planning_mode: string });
-    expect(routeRequests.every((request) => request.planning_mode !== "depart_at")).toBe(true);
+    expect(routeRequests).toHaveLength(0);
   });
 
   it("rejects a past scheduled departure before sending a route request", async () => {

@@ -5,8 +5,13 @@ import { LocationSearchOverlay } from "./components/LocationSearchOverlay";
 import { RoutePlannerPanel, type DestinationSearchResult } from "./components/RoutePlannerPanel";
 import { MapView } from "./components/MapView";
 import { config } from "./config";
-import { parseRoutePlanningResponse, type RoutePlanningResponse } from "./routeApi";
+import {
+  parseRoutePlanningResponse,
+  type PlannedRoute,
+  type RoutePlanningResponse,
+} from "./routeApi";
 import { sampleRouteShadows } from "./routeShadeSampling";
+import { getNavigationProgress, type NavigationProgress } from "./navigation";
 import type { MapStyleName } from "./map/mapConfig";
 import { PLANNING_MODES, type PlanningMode } from "./planningModes";
 import type { ShadePreference } from "./shadePreferences";
@@ -27,6 +32,17 @@ const recentDestinations = [
   "Old Town",
 ];
 type SearchTarget = "origin" | "destination";
+
+const routeOptionsCache = new WeakMap<RoutePlanningResponse, PlannedRoute[]>();
+
+function getRouteOptions(routes: RoutePlanningResponse | null): PlannedRoute[] {
+  if (!routes) return [];
+  const cachedOptions = routeOptionsCache.get(routes);
+  if (cachedOptions) return cachedOptions;
+  const options = [routes.recommended_route, ...routes.alternatives];
+  routeOptionsCache.set(routes, options);
+  return options;
+}
 
 function isDestinationSearchResult(value: unknown): value is DestinationSearchResult {
   if (!value || typeof value !== "object") return false;
@@ -68,9 +84,13 @@ function App() {
   const selectedLocationRef = useRef<maplibregl.LngLat | null>(null);
   const [shadePreference, setShadePreference] = useState<ShadePreference>("full");
   const [navigationStarted, setNavigationStarted] = useState(false);
+  const [navigationLocation, setNavigationLocation] = useState<[number, number] | null>(null);
+  const [navigationLocationError, setNavigationLocationError] = useState<string | null>(null);
+  const navigationWatchIdRef = useRef<number | null>(null);
   const [routeRequestState, setRouteRequestState] = useState<"idle" | "loading" | "error">("idle");
   const [routeRequestError, setRouteRequestError] = useState<string | null>(null);
   const [plannedRoutes, setPlannedRoutes] = useState<RoutePlanningResponse | null>(null);
+  const [routeArrivalTimes, setRouteArrivalTimes] = useState<Record<string, string>>({});
   const [selectedRouteId, setSelectedRouteId] = useState<string | null>(null);
   const [mapStyle, setMapStyle] = useState<MapStyleName>("default");
   const [mapStyleOpen, setMapStyleOpen] = useState(false);
@@ -227,8 +247,17 @@ function App() {
       destinationMarkerRef.current?.remove();
       destinationMarkerRef.current = null;
       routeRequestControllerRef.current?.abort();
+      if (navigationWatchIdRef.current !== null && navigator.geolocation) {
+        navigator.geolocation.clearWatch(navigationWatchIdRef.current);
+      }
     };
   }, []);
+
+  useEffect(() => {
+    if (navigationStarted || navigationWatchIdRef.current === null || !navigator.geolocation) return;
+    navigator.geolocation.clearWatch(navigationWatchIdRef.current);
+    navigationWatchIdRef.current = null;
+  }, [navigationStarted]);
 
   useEffect(() => {
     const query = destinationQuery.trim();
@@ -370,6 +399,7 @@ function App() {
     setRouteRequestState("loading");
     setRouteRequestError(null);
     setPlannedRoutes(null);
+    setRouteArrivalTimes({});
     setNavigationStarted(false);
     routeRequestControllerRef.current?.abort();
     const controller = new AbortController();
@@ -420,6 +450,17 @@ function App() {
         if (controller.signal.aborted) throw error;
       }
       setPlannedRoutes(result);
+      const routeStartTime = new Date(shadeEvaluationTime).getTime();
+      setRouteArrivalTimes(
+        Object.fromEntries(
+          [result.recommended_route, ...result.alternatives].map((route) => [
+            route.id,
+            planningMode === "arrive_by"
+              ? shadeEvaluationTime
+              : new Date(routeStartTime + route.duration_s * 1000).toISOString(),
+          ]),
+        ),
+      );
       setSelectedRouteId(result.recommended_route.id);
       setRouteRequestState("idle");
     } catch (error) {
@@ -454,36 +495,43 @@ function App() {
   }, [planRoute, selectedDestination, selectedLocation]);
 
   const startNavigation = () => {
-    if (plannedRoutes) {
-      setNavigationStarted(true);
+    const selectedRoute = routeOptions.find((route) => route.id === selectedRouteId);
+    if (!selectedRoute) {
+      setRouteRequestError("Choose a planned route before starting navigation.");
       return;
     }
-    void planRoute();
+    if (navigationWatchIdRef.current !== null && navigator.geolocation) {
+      navigator.geolocation.clearWatch(navigationWatchIdRef.current);
+      navigationWatchIdRef.current = null;
+    }
+    setNavigationLocation(null);
+    setNavigationLocationError(null);
+    setNavigationStarted(true);
+    if (!navigator.geolocation?.watchPosition) {
+      setNavigationLocationError("Live location is unavailable. Route navigation is active without GPS progress.");
+      return;
+    }
+    try {
+      navigationWatchIdRef.current = navigator.geolocation.watchPosition(
+        (position) => {
+          setNavigationLocation([position.coords.longitude, position.coords.latitude]);
+          setNavigationLocationError(null);
+        },
+        () => setNavigationLocationError("Location access was denied. Route navigation is active without GPS progress."),
+        { enableHighAccuracy: true, maximumAge: 5_000, timeout: 15_000 },
+      );
+    } catch {
+      setNavigationLocationError("Live location could not start. Route navigation is active without GPS progress.");
+    }
   };
-  const routeOptions = useMemo(
-    () => (plannedRoutes ? [plannedRoutes.recommended_route, ...plannedRoutes.alternatives] : []),
-    [plannedRoutes],
-  );
-  const routeArrivalTimes = useMemo(() => {
-    const plannedStart =
-      planningMode === "depart_at"
-        ? new Date(departureDateTime)
-        : planningMode === "arrive_by"
-          ? new Date(arrivalDateTime)
-          : new Date();
-    if (!Number.isFinite(plannedStart.getTime())) return {};
-    return Object.fromEntries(
-      routeOptions.map((route) => [
-        route.id,
-        new Date(
-          planningMode === "arrive_by"
-            ? plannedStart.getTime()
-            : plannedStart.getTime() + route.duration_s * 1000,
-        ).toISOString(),
-      ]),
-    );
-  }, [routeOptions, planningMode, departureDateTime, arrivalDateTime]);
-
+  const routeOptions = getRouteOptions(plannedRoutes);
+  const activeRoute = navigationStarted
+    ? routeOptions.find((route) => route.id === selectedRouteId) ?? null
+    : null;
+  const navigationProgress: NavigationProgress | null =
+    activeRoute && navigationLocation
+      ? getNavigationProgress(activeRoute, navigationLocation)
+      : null;
   const formattedTime = `${String(Math.floor(time)).padStart(2, "0")}:${time % 1 ? "30" : "00"}`;
   const shadowTime = useMemo(() => {
     const requestedTime = new Date();
@@ -720,6 +768,7 @@ function App() {
           mapStyle={mapStyle}
           routes={routeOptions}
           selectedRouteId={selectedRouteId}
+          navigationLocation={navigationStarted ? navigationLocation : null}
           routeArrivalTimes={routeArrivalTimes}
           shadowsEnabled={shadowsEnabled}
           shadowTime={shadowTime}
@@ -963,8 +1012,25 @@ function App() {
               requestState={routeRequestState}
               requestError={routeRequestError}
               navigationStarted={navigationStarted}
+              navigationLocationError={navigationLocationError}
+              navigationProgress={navigationProgress}
               routes={plannedRoutes}
+              selectedRouteId={selectedRouteId}
+              onSelectRoute={(routeId) => {
+                if (!routeOptions.some((route) => route.id === routeId)) return;
+                setSelectedRouteId(routeId);
+                setNavigationStarted(false);
+              }}
               onStartNavigation={() => void startNavigation()}
+              onStopNavigation={() => {
+                if (navigationWatchIdRef.current !== null && navigator.geolocation) {
+                  navigator.geolocation.clearWatch(navigationWatchIdRef.current);
+                  navigationWatchIdRef.current = null;
+                }
+                setNavigationStarted(false);
+                setNavigationLocation(null);
+                setNavigationLocationError(null);
+              }}
               onCloseDestination={() => {
                 destinationMarkerRef.current?.remove();
                 destinationMarkerRef.current = null;

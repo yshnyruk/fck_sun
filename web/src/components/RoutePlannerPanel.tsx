@@ -2,6 +2,8 @@ import type { Dispatch, RefObject, SetStateAction } from "react";
 import { Icon } from "./Icon";
 import { SHADE_PREFERENCES, type ShadePreference } from "../shadePreferences";
 import type { RoutePlanningResponse } from "../routeApi";
+import type { NavigationProgress } from "../navigation";
+import { formatDistance, formatDuration } from "../navigation";
 import { PLANNING_MODES, type PlanningMode } from "../planningModes";
 
 export type DestinationSearchResult = {
@@ -33,8 +35,13 @@ type RoutePlannerPanelProps = {
   requestState: "idle" | "loading" | "error";
   requestError: string | null;
   navigationStarted: boolean;
+  navigationLocationError: string | null;
+  navigationProgress: NavigationProgress | null;
   routes: RoutePlanningResponse | null;
+  selectedRouteId: string | null;
+  onSelectRoute: (routeId: string) => void;
   onStartNavigation: () => void;
+  onStopNavigation: () => void;
   onCloseDestination: () => void;
   onPlanningInputChange: () => void;
 };
@@ -59,11 +66,20 @@ export function RoutePlannerPanel({
   requestState,
   requestError,
   navigationStarted,
+  navigationLocationError,
+  navigationProgress,
   routes,
+  selectedRouteId,
+  onSelectRoute,
   onStartNavigation,
+  onStopNavigation,
   onCloseDestination,
   onPlanningInputChange,
 }: RoutePlannerPanelProps) {
+  const selectedRoute = routes
+    ? [routes.recommended_route, ...routes.alternatives].find((route) => route.id === selectedRouteId)
+    : null;
+
   return (
     <div className="route-planner">
       <div className="route-planner-header">
@@ -174,18 +190,65 @@ export function RoutePlannerPanel({
       <button
         className="start-navigation"
         type="button"
-        disabled={requestState === "loading"}
+        disabled={requestState === "loading" || !routes}
         onClick={(event) => {
           event.stopPropagation();
-          onStartNavigation();
+          if (navigationStarted) onStopNavigation();
+          else onStartNavigation();
         }}
       >
         {requestState === "loading"
           ? "Planning route..."
           : navigationStarted
-            ? "Navigation started"
+            ? "End navigation"
             : "Start navigation"}
       </button>
+      {navigationStarted && (
+        <section className="navigation-progress" aria-label="Navigation progress" aria-live="polite">
+          <strong>Navigation active</strong>
+          {navigationProgress ? (
+            <p>
+              {formatDistance(navigationProgress.remainingDistanceM)} remaining · {formatDuration(navigationProgress.remainingDurationS)}
+            </p>
+          ) : (
+            <p>{navigationLocationError ?? "Waiting for your location…"}</p>
+          )}
+          {navigationLocationError && navigationProgress && <p>{navigationLocationError}</p>}
+        </section>
+      )}
+      {routes && (
+        <div className="planned-routes" aria-label="Available routes">
+          <h3>Routes</h3>
+          {[routes.recommended_route, ...routes.alternatives].map((route, index) => (
+            <button
+              key={route.id}
+              type="button"
+              className={`planned-route-option ${route.id === selectedRouteId ? "selected" : ""}`}
+              aria-pressed={route.id === selectedRouteId}
+              onClick={() => onSelectRoute(route.id)}
+            >
+              <strong>{index === 0 ? "Recommended route" : `Alternative ${index}`}</strong>
+              <span>{formatDistance(route.distance_m)} · {formatDuration(route.duration_s)}</span>
+            </button>
+          ))}
+          {selectedRoute && (
+            <section className="selected-route-details" aria-label="Selected route details">
+              <h3>Overall shade coverage</h3>
+              <p>Selected route shade coverage</p>
+              <strong>{selectedRoute.shade?.shade_coverage_percent === null || selectedRoute.shade === null
+                ? "Unavailable"
+                : `${Math.round(selectedRoute.shade.shade_coverage_percent)}%`}</strong>
+              <p>{selectedRoute.coverage_confidence === "high" ? "High" : selectedRoute.coverage_confidence === "partial" ? "Partial" : "Insufficient"}</p>
+              {selectedRoute.shade?.unknown_distance_m ? (
+                <>
+                  <p>Some segments have unknown shade and are not counted as exposed.</p>
+                  <p>Shade unknown for {formatDistance(selectedRoute.shade.unknown_distance_m)} of this route</p>
+                </>
+              ) : null}
+            </section>
+          )}
+        </div>
+      )}
       {requestError && (
         <p className="location-error" role="alert">
           {requestError}
