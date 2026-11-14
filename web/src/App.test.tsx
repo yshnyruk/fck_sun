@@ -1,4 +1,10 @@
-import { fireEvent, render, screen, waitForElementToBeRemoved, within } from "@testing-library/react";
+import {
+  fireEvent,
+  render,
+  screen,
+  waitForElementToBeRemoved,
+  within,
+} from "@testing-library/react";
 import { afterEach, beforeEach, describe, it, expect, vi } from "vitest";
 import type { LngLatLike } from "maplibre-gl";
 import App from "./App";
@@ -153,8 +159,9 @@ describe("FckSun frontend", () => {
     const slider = screen.getByRole("slider", { name: "Choose time of day" });
     fireEvent.change(slider, { target: { value: "12" } });
 
-    expect(within(screen.getByLabelText("Shadow time")).getByText("12:00", { selector: "strong" }))
-      .toBeDefined();
+    expect(
+      within(screen.getByLabelText("Shadow time")).getByText("12:00", { selector: "strong" }),
+    ).toBeDefined();
     expect(screen.getByText("06:00")).toBeDefined();
     expect(screen.getByText("18:00")).toBeDefined();
   });
@@ -188,9 +195,9 @@ describe("FckSun frontend", () => {
     expect(screen.getByText("Recommended route")).toBeDefined();
     fireEvent.click(screen.getByRole("button", { name: "Turn shadows off" }));
     expect(screen.getByText("Recommended route")).toBeDefined();
-    expect(fetchMock.mock.calls.filter(([input]) => String(input).endsWith("/routes/candidates"))).toHaveLength(
-      1,
-    );
+    expect(
+      fetchMock.mock.calls.filter(([input]) => String(input).endsWith("/routes/candidates")),
+    ).toHaveLength(1);
   });
 
   it("converts a selected local departure time to an ISO timestamp", () => {
@@ -232,7 +239,9 @@ describe("FckSun frontend", () => {
     fireEvent.click(screen.getByRole("button", { name: "Set test starting location" }));
 
     await selectCentralPark();
-    expect(fetchMock.mock.calls.some(([input]) => String(input).endsWith("/routes/candidates"))).toBe(true);
+    expect(
+      fetchMock.mock.calls.some(([input]) => String(input).endsWith("/routes/candidates")),
+    ).toBe(true);
     expect((screen.getByLabelText("Starting point") as HTMLInputElement).value).toBe(
       "Current location",
     );
@@ -266,13 +275,6 @@ describe("FckSun frontend", () => {
       json: async () => routeResponse,
     } as Response);
     expect(await screen.findByText("Recommended route")).toBeDefined();
-    fireEvent.click(screen.getByRole("button", { name: "Start navigation" }));
-    expect((await screen.findByRole("button", { name: "End navigation" })).textContent).toBe(
-      "End navigation",
-    );
-    expect(screen.getByRole("region", { name: "Navigation progress" })).toBeDefined();
-    expect(screen.getByText(/1.2 km remaining/)).toBeDefined();
-    expect(screen.getByText(/1.2 km · 15 min/)).toBeDefined();
     expect(screen.getByText("Overall shade coverage")).toBeDefined();
     const selectedRouteDetails = within(
       screen.getByRole("region", { name: "Selected route details" }),
@@ -281,9 +283,23 @@ describe("FckSun frontend", () => {
     expect(selectedRouteDetails.getByText("65%")).toBeDefined();
     expect(selectedRouteDetails.getByText("Partial")).toBeDefined();
     expect(
-      selectedRouteDetails.getByText("Some segments have unknown shade and are not counted as exposed."),
+      selectedRouteDetails.getByText(
+        "Some segments have unknown shade and are not counted as exposed.",
+      ),
     ).toBeDefined();
     expect(selectedRouteDetails.getByText("Shade unknown for 200 m of this route")).toBeDefined();
+    fireEvent.click(screen.getByRole("button", { name: "Start navigation" }));
+    expect((await screen.findByRole("button", { name: "End navigation" })).textContent).toBe(
+      "End navigation",
+    );
+    expect(screen.getByRole("region", { name: "Navigation" })).toBeDefined();
+    expect(screen.queryByRole("region", { name: "Route locations" })).toBeNull();
+    expect(screen.getByText("Completed: 0 m")).toBeDefined();
+    expect(screen.getByText("Remaining: 1.2 km")).toBeDefined();
+    fireEvent.click(screen.getByRole("button", { name: "End navigation" }));
+    expect(screen.getByRole("textbox", { name: "Search for a destination" })).toBeDefined();
+    expect(screen.queryByRole("region", { name: "Navigation" })).toBeNull();
+    expect(screen.queryByText("Central Park")).toBeNull();
   });
 
   it("reverses the displayed points and submits their reversed coordinates", async () => {
@@ -512,8 +528,9 @@ describe("FckSun frontend", () => {
 
     render(<App />);
     await selectCentralPark();
-    expect((screen.getByRole("button", { name: /Start navigation/ }) as HTMLButtonElement).disabled)
-      .toBe(true);
+    expect(
+      (screen.getByRole("button", { name: /Start navigation/ }) as HTMLButtonElement).disabled,
+    ).toBe(true);
     const routeRequests = fetchMock.mock.calls
       .filter(([input]) => String(input).endsWith("/routes/candidates"))
       .map(([, init]) => JSON.parse(String(init?.body)) as { planning_mode: string });

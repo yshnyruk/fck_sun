@@ -1050,13 +1050,60 @@
   font-size: 12px;
 }
 
+.navigation-mode-panel {
+  display: grid;
+  gap: 8px;
+  padding: 18px 8px 10px;
+  color: #244665;
+}
+
+.navigation-mode-eyebrow {
+  margin: 0;
+  color: #63839b;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.navigation-mode-panel h2 {
+  margin: 0;
+  font-size: 20px;
+}
+
+.navigation-distances {
+  display: grid;
+  gap: 4px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: #effaf5;
+}
+
+.navigation-distances p {
+  margin: 0;
+  color: #365e4a;
+  font-size: 13px;
+}
+
+.end-navigation {
+  min-height: 44px;
+  border: 0;
+  border-radius: 11px;
+  color: white;
+  background: #d74d56;
+  font-size: 14px;
+  font-weight: 800;
+}
+
 .navigation-location-marker {
   width: 20px;
   height: 20px;
   border: 3px solid white;
   border-radius: 50%;
   background: #247acb;
-  box-shadow: 0 0 0 7px rgba(36, 122, 203, 0.24), 0 2px 8px rgba(17, 48, 77, 0.4);
+  box-shadow:
+    0 0 0 7px rgba(36, 122, 203, 0.24),
+    0 2px 8px rgba(17, 48, 77, 0.4);
 }
 
 .planned-routes {

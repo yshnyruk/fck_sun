@@ -138,9 +138,7 @@ def test_select_recommended_route_keeps_distinct_provider_geometry() -> None:
     routes = [
         route("recommended", 1000, 1000),
         route("alternative", 1020, 1020).model_copy(
-            update={
-                "geometry": LineStringGeometry(coordinates=[(0, 0), (0.01, 0), (0.01, 0.01)])
-            }
+            update={"geometry": LineStringGeometry(coordinates=[(0, 0), (0.01, 0), (0.01, 0.01)])}
         ),
     ]
     coverages = {

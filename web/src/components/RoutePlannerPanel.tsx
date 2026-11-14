@@ -77,7 +77,9 @@ export function RoutePlannerPanel({
   onPlanningInputChange,
 }: RoutePlannerPanelProps) {
   const selectedRoute = routes
-    ? [routes.recommended_route, ...routes.alternatives].find((route) => route.id === selectedRouteId)
+    ? [routes.recommended_route, ...routes.alternatives].find(
+        (route) => route.id === selectedRouteId,
+      )
     : null;
 
   return (
@@ -204,12 +206,18 @@ export function RoutePlannerPanel({
             : "Start navigation"}
       </button>
       {navigationStarted && (
-        <section className="navigation-progress" aria-label="Navigation progress" aria-live="polite">
+        <section
+          className="navigation-progress"
+          aria-label="Navigation progress"
+          aria-live="polite"
+        >
           <strong>Navigation active</strong>
           {navigationProgress ? (
-            <p>
-              {formatDistance(navigationProgress.remainingDistanceM)} remaining · {formatDuration(navigationProgress.remainingDurationS)}
-            </p>
+            <div className="navigation-distances">
+              <p>Completed: {formatDistance(navigationProgress.completedDistanceM)}</p>
+              <p>Remaining: {formatDistance(navigationProgress.remainingDistanceM)}</p>
+              <p>Estimated time: {formatDuration(navigationProgress.remainingDurationS)}</p>
+            </div>
           ) : (
             <p>{navigationLocationError ?? "Waiting for your location…"}</p>
           )}
@@ -228,21 +236,35 @@ export function RoutePlannerPanel({
               onClick={() => onSelectRoute(route.id)}
             >
               <strong>{index === 0 ? "Recommended route" : `Alternative ${index}`}</strong>
-              <span>{formatDistance(route.distance_m)} · {formatDuration(route.duration_s)}</span>
+              <span>
+                {formatDistance(route.distance_m)} · {formatDuration(route.duration_s)}
+              </span>
             </button>
           ))}
           {selectedRoute && (
             <section className="selected-route-details" aria-label="Selected route details">
               <h3>Overall shade coverage</h3>
               <p>Selected route shade coverage</p>
-              <strong>{selectedRoute.shade?.shade_coverage_percent === null || selectedRoute.shade === null
-                ? "Unavailable"
-                : `${Math.round(selectedRoute.shade.shade_coverage_percent)}%`}</strong>
-              <p>{selectedRoute.coverage_confidence === "high" ? "High" : selectedRoute.coverage_confidence === "partial" ? "Partial" : "Insufficient"}</p>
+              <strong>
+                {selectedRoute.shade?.shade_coverage_percent === null ||
+                selectedRoute.shade === null
+                  ? "Unavailable"
+                  : `${Math.round(selectedRoute.shade.shade_coverage_percent)}%`}
+              </strong>
+              <p>
+                {selectedRoute.coverage_confidence === "high"
+                  ? "High"
+                  : selectedRoute.coverage_confidence === "partial"
+                    ? "Partial"
+                    : "Insufficient"}
+              </p>
               {selectedRoute.shade?.unknown_distance_m ? (
                 <>
                   <p>Some segments have unknown shade and are not counted as exposed.</p>
-                  <p>Shade unknown for {formatDistance(selectedRoute.shade.unknown_distance_m)} of this route</p>
+                  <p>
+                    Shade unknown for {formatDistance(selectedRoute.shade.unknown_distance_m)} of
+                    this route
+                  </p>
                 </>
               ) : null}
             </section>
@@ -255,7 +277,9 @@ export function RoutePlannerPanel({
         </p>
       )}
       {routes && (
-        <p className="route-map-hint" role="status">Tap a route on the map to select it.</p>
+        <p className="route-map-hint" role="status">
+          Tap a route on the map to select it.
+        </p>
       )}
     </div>
   );

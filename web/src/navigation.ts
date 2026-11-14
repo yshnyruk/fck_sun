@@ -1,17 +1,14 @@
 import type { PlannedRoute } from "./routeApi";
 
 export type NavigationProgress = {
-  distanceAlongRouteM: number;
+  completedDistanceM: number;
   remainingDistanceM: number;
   remainingDurationS: number;
 };
 
 const toRadians = (degrees: number) => (degrees * Math.PI) / 180;
 
-function distanceBetween(
-  first: [number, number],
-  second: [number, number],
-): number {
+function distanceBetween(first: [number, number], second: [number, number]): number {
   const earthRadiusM = 6_371_000;
   const latitudeDelta = toRadians(second[1] - first[1]);
   const longitudeDelta = toRadians(second[0] - first[0]);
@@ -44,9 +41,10 @@ export function getNavigationProgress(
     const locationX = (location[0] - start[0]) * longitudeScale;
     const locationY = (location[1] - start[1]) * latitudeScale;
     const denominator = endX * endX + endY * endY;
-    const fraction = denominator === 0
-      ? 0
-      : Math.max(0, Math.min(1, (locationX * endX + locationY * endY) / denominator));
+    const fraction =
+      denominator === 0
+        ? 0
+        : Math.max(0, Math.min(1, (locationX * endX + locationY * endY) / denominator));
     const distanceToSegment = Math.hypot(locationX - fraction * endX, locationY - fraction * endY);
     if (distanceToSegment < nearestDistance) {
       nearestDistance = distanceToSegment;
@@ -55,10 +53,12 @@ export function getNavigationProgress(
     walkedDistanceM += segmentLength;
   }
 
-  const progress = Math.max(0, Math.min(1, distanceAlongRouteM / walkedDistanceM));
+  const progress =
+    walkedDistanceM > 0 ? Math.max(0, Math.min(1, distanceAlongRouteM / walkedDistanceM)) : 0;
+  const completedDistanceM = route.distance_m * progress;
   const remainingDistanceM = Math.max(0, route.distance_m * (1 - progress));
   return {
-    distanceAlongRouteM: route.distance_m - remainingDistanceM,
+    completedDistanceM,
     remainingDistanceM,
     remainingDurationS: route.duration_s * (1 - progress),
   };

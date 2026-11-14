@@ -326,7 +326,9 @@ export function MapView({
         }`;
         element.setAttribute("aria-label", `Estimated arrival ${formattedArrival}`);
         element.innerHTML = `<span class="route-arrival-balloon" aria-hidden="true">🎈</span><span class="route-arrival-time">${formattedArrival}</span>`;
-        arrivalMarkers.push(new maplibregl.Marker({ element, anchor: "bottom" }).setLngLat(midpoint).addTo(map));
+        arrivalMarkers.push(
+          new maplibregl.Marker({ element, anchor: "bottom" }).setLngLat(midpoint).addTo(map),
+        );
       }
       map.addLayer({
         id: "planned-route-alternative-line",

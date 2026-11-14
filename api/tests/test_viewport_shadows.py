@@ -49,9 +49,7 @@ def test_viewport_shadow_service_forwards_request_without_changing_data() -> Non
 
 def test_shadows_endpoint_returns_viewport_data_and_requested_time() -> None:
     provider = FakeShadowProvider()
-    app.dependency_overrides[get_viewport_shadow_service] = lambda: ViewportShadowService(
-        provider
-    )
+    app.dependency_overrides[get_viewport_shadow_service] = lambda: ViewportShadowService(provider)
     try:
         response = TestClient(app).get(
             "/api/v1/shadows",
@@ -86,9 +84,7 @@ def test_shadows_endpoint_rejects_invalid_bounds_and_non_utc_time() -> None:
         "time": "2026-06-01T12:00:00Z",
     }
 
-    invalid_bounds = client.get(
-        "/api/v1/shadows", params={**base, "west": -73.9}
-    )
+    invalid_bounds = client.get("/api/v1/shadows", params={**base, "west": -73.9})
     non_utc_time = client.get(
         "/api/v1/shadows", params={**base, "time": "2026-06-01T14:00:00+02:00"}
     )

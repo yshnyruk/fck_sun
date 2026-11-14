@@ -56,13 +56,10 @@ export async function sampleRouteShadows(
         window.removeEventListener("unhandledrejection", handleSdkFailure);
       };
       const handleAbort = () => reject(new DOMException("Aborted", "AbortError"));
-      const timer = window.setTimeout(
-        () => {
-          cleanup();
-          reject(new Error("ShadeMap sampling timed out"));
-        },
-        SAMPLE_TIMEOUT_MS,
-      );
+      const timer = window.setTimeout(() => {
+        cleanup();
+        reject(new Error("ShadeMap sampling timed out"));
+      }, SAMPLE_TIMEOUT_MS);
       const handleSdkFailure = (event: PromiseRejectionEvent) => {
         const message = event.reason instanceof Error ? event.reason.message : "";
         if (!message.startsWith("Could not load ShadeMap API.")) return;
@@ -89,7 +86,8 @@ export async function sampleRouteShadows(
                         return (
                           properties !== null &&
                           properties.underground !== "true" &&
-                          (properties.height !== undefined || properties.render_height !== undefined)
+                          (properties.height !== undefined ||
+                            properties.render_height !== undefined)
                         );
                       })
                   : []) as unknown as Awaited<
@@ -143,10 +141,15 @@ export async function sampleRouteShadows(
                     : shaded
                       ? ("confirmed_shade" as const)
                       : ("confirmed_exposure" as const),
-                coverage_confidence: shaded === undefined ? ("insufficient" as const) : ("partial" as const),
+                coverage_confidence:
+                  shaded === undefined ? ("insufficient" as const) : ("partial" as const),
               };
             } catch {
-              return { ...segment, classification: "unknown" as const, coverage_confidence: "insufficient" as const };
+              return {
+                ...segment,
+                classification: "unknown" as const,
+                coverage_confidence: "insufficient" as const,
+              };
             }
           }),
         );
@@ -176,7 +179,8 @@ export async function sampleRouteShadows(
             unknown_distance_m: unknownDistance,
             segments: updatedSegments,
           },
-          coverage_confidence: classifiedDistance > 0 ? ("partial" as const) : ("insufficient" as const),
+          coverage_confidence:
+            classifiedDistance > 0 ? ("partial" as const) : ("insufficient" as const),
         };
       }),
     );
@@ -192,9 +196,9 @@ function coordinateAtDistance(
   targetDistance: number,
 ): [longitude: number, latitude: number] {
   const coordinates = route.geometry.coordinates;
-  const lengths = coordinates.slice(1).map((coordinate, index) =>
-    haversineDistance(coordinates[index], coordinate),
-  );
+  const lengths = coordinates
+    .slice(1)
+    .map((coordinate, index) => haversineDistance(coordinates[index], coordinate));
   const totalGeometryDistance = lengths.reduce((total, length) => total + length, 0);
   const geometryTarget = (targetDistance / route.distance_m) * totalGeometryDistance;
   let traversed = 0;
@@ -211,10 +215,7 @@ function coordinateAtDistance(
   return coordinates[coordinates.length - 1];
 }
 
-function haversineDistance(
-  start: [number, number],
-  end: [number, number],
-): number {
+function haversineDistance(start: [number, number], end: [number, number]): number {
   const toRadians = (degrees: number) => (degrees * Math.PI) / 180;
   const latitudeDifference = toRadians(end[1] - start[1]);
   const longitudeDifference = toRadians(end[0] - start[0]);

@@ -1,5 +1,6 @@
 import { Icon } from "./Icon";
 import type { DestinationSearchResult } from "./RoutePlannerPanel";
+import type { RecentDestination } from "../recentDestinations";
 
 type SearchTarget = "origin" | "destination";
 type SearchState = "idle" | "loading" | "error";
@@ -11,7 +12,7 @@ type LocationSearchOverlayProps = {
   query: string;
   searchState: SearchState;
   suggestions: DestinationSearchResult[];
-  recentDestinations: string[];
+  recentDestinations: RecentDestination[];
   onClose: () => void;
   onQueryChange: (value: string) => void;
   onChooseOnMap: () => void;
@@ -91,11 +92,15 @@ export function LocationSearchOverlay({
           <>
             <p>Recent destinations</p>
             {recentDestinations.map((destination) => (
-              <button type="button" key={destination}>
+              <button
+                type="button"
+                key={`${destination.name}-${destination.coordinate.latitude}-${destination.coordinate.longitude}`}
+                onClick={() => onSelect({ ...destination, label: destination.name })}
+              >
                 <span className="recent-icon">
                   <Icon name="arrow" />
                 </span>
-                {destination}
+                {destination.name}
               </button>
             ))}
           </>

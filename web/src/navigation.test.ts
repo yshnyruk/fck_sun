@@ -4,7 +4,13 @@ import type { PlannedRoute } from "./routeApi";
 
 const route: PlannedRoute = {
   id: "route",
-  geometry: { type: "LineString", coordinates: [[0, 0], [0.01, 0]] },
+  geometry: {
+    type: "LineString",
+    coordinates: [
+      [0, 0],
+      [0.01, 0],
+    ],
+  },
   distance_m: 1000,
   duration_s: 600,
   score: null,
@@ -16,7 +22,9 @@ describe("navigation progress", () => {
   it("projects the current position onto the selected route", () => {
     const progress = getNavigationProgress(route, [0.005, 0]);
 
+    expect(progress.completedDistanceM).toBeCloseTo(500, -1);
     expect(progress.remainingDistanceM).toBeCloseTo(500, -1);
+    expect(progress.completedDistanceM + progress.remainingDistanceM).toBeCloseTo(1000, -1);
     expect(progress.remainingDurationS).toBeCloseTo(300, -1);
   });
 
