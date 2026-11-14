@@ -123,10 +123,13 @@ def score_routes_with_frontend_shade(
             shaded_distance_m=shaded,
             exposed_distance_m=exposed,
             unknown_distance_m=unknown,
-            shaded_percentage=shaded / total * 100,
-            exposed_percentage=exposed / total * 100,
-            unknown_percentage=unknown / total * 100,
-            usable_percentage=classified / total * 100,
+            # Distance rescaling and percentage conversion can produce values a
+            # few ulps above 100 (for example, 100.00000000000003). Keep these
+            # derived percentages within the schema's [0, 100] bounds.
+            shaded_percentage=_bounded_percentage(shaded / total * 100),
+            exposed_percentage=_bounded_percentage(exposed / total * 100),
+            unknown_percentage=_bounded_percentage(unknown / total * 100),
+            usable_percentage=_bounded_percentage(classified / total * 100),
             coverage_confidence=(
                 CoverageConfidence.PARTIAL if classified > 0 else CoverageConfidence.INSUFFICIENT
             ),
@@ -153,6 +156,11 @@ def score_routes_with_frontend_shade(
         preference,
     )
     return RouteResponse(recommended_route=recommended, alternatives=alternatives)
+
+
+def _bounded_percentage(value: float) -> float:
+    """Clamp floating-point percentage results to their valid range."""
+    return min(100.0, max(0.0, value))
 
 
 def _segments_for_route(route: Route) -> list[RouteSegment]:
